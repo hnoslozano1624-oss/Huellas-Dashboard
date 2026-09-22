@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Huellas Online — Dashboard</title>
+<style>
+  :root {
+    --bg: #F7F5F1;
+    --surface: #FFFFFF;
+    --border: #E5E1D8;
+    --ink: #2C2C2C;
+    --ink-soft: #6B6862;
+    --jade: #5C9E8A;
+    --jade-dark: #3F7364;
+    --jade-tint: #E7F1EE;
+    --salmon: #E8A898;
+    --salmon-dark: #A85F4E;
+    --salmon-tint: #FBEEE9;
+    --danger: #B24A3B;
+    --danger-tint: #F8E9E6;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #1E1D1A; --surface: #29281F; --border: #403E35;
+      --ink: #F2F0EA; --ink-soft: #B5B2A9;
+      --jade-tint: #223A34; --salmon-tint: #3A2A24; --danger-tint: #3A2420;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1E1D1A; --surface: #29281F; --border: #403E35;
+    --ink: #F2F0EA; --ink-soft: #B5B2A9;
+    --jade-tint: #223A34; --salmon-tint: #3A2A24; --danger-tint: #3A2420;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: Arial, Helvetica, sans-serif; font-size: 14px;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  h1, h2, h3 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; margin: 0; }
+  .shell { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 230px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border);
+    padding: 24px 16px; display: flex; flex-direction: column; gap: 24px;
+  }
+  .brand h1 { font-size: 20px; color: var(--jade-dark); }
+  .brand p { margin: 4px 0 0; font-size: 12px; color: var(--ink-soft); }
+  nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item {
+    text-align: left; border: none; background: none; padding: 10px 12px; border-radius: 8px;
+    font-size: 14px; color: var(--ink-soft); cursor: pointer; font-family: inherit;
+  }
+  .nav-item:hover { background: var(--bg); color: var(--ink); }
+  .nav-item.active { background: var(--jade-tint); color: var(--jade-dark); font-weight: bold; }
+  .role-note { margin-top: auto; font-size: 12px; color: var(--ink-soft); border-top: 1px solid var(--border); padding-top: 16px; }
+  .main { flex: 1; padding: 24px 32px; overflow-x: auto; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .topbar h2 { font-size: 22px; }
+  .role-toggle { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px; }
+  .role-toggle button {
+    border: none; background: none; padding: 8px 16px; border-radius: 999px; font-family: inherit; font-size: 13px;
+    color: var(--ink-soft); cursor: pointer;
+  }
+  .role-toggle button.active { background: var(--jade); color: #fff; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .kpi-card .label { font-size: 12px; color: var(--ink-soft); }
+  .kpi-card .value { font-size: 24px; margin-top: 6px; }
+  .kpi-card.alert .value { color: var(--danger); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .panel h3 { font-size: 16px; margin-bottom: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--ink-soft); font-weight: normal; font-size: 12px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+  .badge.pagado { background: var(--jade-tint); color: var(--jade-dark); }
+  .badge.pendiente { background: var(--salmon-tint); color: var(--salmon-dark); }
+  .form-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; margin-bottom: 10px; }
+  label { display: block; font-size: 12px; color: var(--ink-soft); margin-bottom: 4px; }
+  select, input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--ink); font-family: inherit; font-size: 13px; }
+  .btn { padding: 9px 16px; border-radius: 8px; border: none; font-family: inherit; font-size: 13px; cursor: pointer; }
+  .btn-jade { background: var(--jade); color: #fff; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--ink); }
+  .remove-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 18px; line-height: 1; }
+  .total-row { display: flex; justify-content: flex-end; gap: 24px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .total-row .total-value { font-size: 20px; }
+  .placeholder { color: var(--ink-soft); font-size: 13px; padding: 40px 0; text-align: center; }
+  .confirm-msg { background: var(--jade-tint); color: var(--jade-dark); padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>Huellas Online</h1>
+      <p>Rocu Distribuciones</p>
+    </div>
+    <nav id="nav"></nav>
+    <div class="role-note" id="roleNote"></div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <h2 id="viewTitle"></h2>
+      <div class="role-toggle">
+        <button id="btnAdmin" onclick="setRole('admin')">Administradora</button>
+        <button id="btnVend" onclick="setRole('vendedora')">Vendedora</button>
+      </div>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<script>
+var NAV = [
+  { id: 'pedidos', label: 'Pedidos', roles: ['admin'] },
+  { id: 'solicitud', label: 'Solicitud de pedidos', roles: ['admin', 'vendedora'] },
+  { id: 'inventario', label: 'Inventario', roles: ['admin'] },
+  { id: 'compras', label: 'Órdenes de compra', roles: ['admin'] },
+  { id: 'caja', label: 'Flujo de caja', roles: ['admin'] },
+  { id: 'crm', label: 'CRM', roles: ['admin'] }
+];
+
+var CATALOG = [
+  { code: 'HO391', name: 'Calabaza Café 4.5kg', category: 'Alimento Perros', price: 17900 },
+  { code: 'HO214', name: 'Arena Aglomerante 10kg', category: 'Arenas', price: 22000 },
+  { code: 'HO156', name: 'Snack Dental Mediano', category: 'Snacks', price: 9500 },
+  { code: 'HO309', name: 'Alimento Gatos Salmón 3kg', category: 'Alimento Gatos', price: 24500 },
+  { code: 'HO410', name: 'Credelio 2.5-5.5kg', category: 'Farmacia', price: 38000 }
+];
+
+var CLIENTES = ['María Torres', 'Andrés Díaz', 'Gloria Ruiz', 'Cliente nuevo'];
+
+var PEDIDOS_DEMO = [
+  { id: 'P-0231', vendedor: 'Juliet Lievano', cliente: 'María Torres', categoria: 'Alimento Perros', total: 87500, pago: 'Transferencia Nequi', estado: 'pagado' },
+  { id: 'P-0230', vendedor: 'Carolina Ruiz', cliente: 'Andrés Díaz', categoria: 'Snacks', total: 32000, pago: 'Crédito 8 días', estado: 'pendiente' },
+  { id: 'P-0229', vendedor: 'Juliet Lievano', cliente: 'Gloria Ruiz', categoria: 'Farmacia', total: 38000, pago: 'Efectivo', estado: 'pagado' },
+  { id: 'P-0228', vendedor: 'Carolina Ruiz', cliente: 'Cliente nuevo', categoria: 'Alimento Gatos', total: 49000, pago: 'Crédito 15 días', estado: 'pendiente' }
+];
+
+var state = { role: 'admin', view: 'pedidos' };
+var orderRows = [0];
+var rowSeq = 1;
+
+function setRole(role) {
+  state.role = role;
+  var allowed = NAV.filter(function (n) { return n.roles.indexOf(role) !== -1; });
+  state.view = allowed[0].id;
+  render();
+}
+
+function setView(view) {
+  state.view = view;
+  render();
+}
+
+function money(n) {
+  return '$' + n.toLocaleString('es-CO');
+}
+
+function render() {
+  document.getElementById('btnAdmin').className = state.role === 'admin' ? 'active' : '';
+  document.getElementById('btnVend').className = state.role === 'vendedora' ? 'active' : '';
+
+  var nav = document.getElementById('nav');
+  nav.innerHTML = '';
+  NAV.filter(function (n) { return n.roles.indexOf(state.role) !== -1; }).forEach(function (n) {
+    var b = document.createElement('button');
+    b.className = 'nav-item' + (state.view === n.id ? ' active' : '');
+    b.textContent = n.label;
+    b.onclick = function () { setView(n.id); };
+    nav.appendChild(b);
+  });
+
+  document.getElementById('roleNote').textContent = state.role === 'vendedora'
+    ? 'Esta cuenta solo tiene acceso a solicitud de pedidos.'
+    : 'Vista completa de administración.';
+
+  var current = NAV.find(function (n) { return n.id === state.view; });
+  document.getElementById('viewTitle').textContent = current.label;
+
+  var content = document.getElementById('content');
+  if (state.view === 'pedidos') content.innerHTML = renderPedidos();
+  else if (state.view === 'solicitud') { content.innerHTML = renderSolicitud(); wireSolicitud(); }
+  else content.innerHTML = renderPlaceholder(current.label);
+}
+
+function renderPedidos() {
+  var pendientes = PEDIDOS_DEMO.filter(function (p) { return p.estado === 'pendiente'; }).length;
+  var totalHoy = PEDIDOS_DEMO.reduce(function (s, p) { return s + p.total; }, 0);
+  var rows = PEDIDOS_DEMO.map(function (p) {
+    return '<tr><td>' + p.id + '</td><td>' + p.vendedor + '</td><td>' + p.cliente + '</td><td>' + p.categoria +
+      '</td><td>' + money(p.total) + '</td><td>' + p.pago + '</td><td><span class="badge ' + p.estado + '">' +
+      (p.estado === 'pagado' ? 'Pagado' : 'Pendiente') + '</span></td></tr>';
+  }).join('');
+  return '' +
+    '<div class="kpi-grid">' +
+      '<div class="kpi-card"><div class="label">Pedidos hoy</div><div class="value">' + PEDIDOS_DEMO.length + '</div></div>' +
+      '<div class="kpi-card"><div class="label">Total vendido hoy</div><div class="value">' + money(totalHoy) + '</div></div>' +
+      '<div class="kpi-card alert"><div class="label">Pendientes de pago</div><div class="value">' + pendientes + '</div></div>' +
+      '<div class="kpi-card alert"><div class="label">Referencias en stock crítico</div><div class="value">6</div></div>' +
+    '</div>' +
+    '<div class="panel"><h3>Pedidos recientes</h3><table><thead><tr><th>ID</th><th>Vendedor</th><th>Cliente</th><th>Categoría</th><th>Total</th><th>Forma de pago</th><th>Estado</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function renderSolicitud() {
+  var clienteOpts = CLIENTES.map(function (c) { return '<option>' + c + '</option>'; }).join('');
+  var rowsHtml = orderRows.map(function (rid) { return productRow(rid); }).join('');
+  return '' +
+    '<div class="panel">' +
+      '<h3>Nuevo pedido</h3>' +
+      '<div class="form-row" style="grid-template-columns: 1fr 1fr;">' +
+        '<div><label>Cliente</label><select>' + clienteOpts + '</select></div>' +
+        '<div><label>Forma de pago</label><select><option>Efectivo</option><option>Transferencia Nequi</option><option>Transferencia Daviplata</option><option>Crédito 8 días</option><option>Crédito 15 días</option></select></div>' +
+      '</div>' +
+      '<div style="margin-top:18px;">' +
+        '<label>Productos</label>' +
+        '<div id="rows">' + rowsHtml + '</div>' +
+        '<button class="btn btn-outline" onclick="addRow()">+ Agregar producto</button>' +
+      '</div>' +
+      '<div class="total-row"><span>Total del pedido</span><span class="total-value" id="totalValue">$0</span></div>' +
+      '<div style="margin-top:16px;"><button class="btn btn-jade" onclick="confirmOrder()">Registrar pedido</button></div>' +
+      '<div class="confirm-msg" id="confirmMsg">Pedido registrado. El inventario y el total se calculan automáticamente — esto es una vista previa de diseño, aún no conectada a la base de datos real.</div>' +
+    '</div>';
+}
+
+function productRow(rid) {
+  var opts = CATALOG.map(function (p) { return '<option value="' + p.code + '">' + p.name + ' — ' + money(p.price) + '</option>'; }).join('');
+  return '<div class="form-row" data-row="' + rid + '">' +
+    '<div><label>Producto</label><select class="prod-select">' + opts + '</select></div>' +
+    '<div><label>Cantidad</label><input type="number" class="qty-input" value="1" min="1"></div>' +
+    '<div><label>Subtotal</label><input type="text" class="subtotal-display" value="" readonly></div>' +
+    '<button class="remove-btn" onclick="removeRow(' + rid + ')" title="Quitar">×</button>' +
+    '</div>';
+}
+
+function addRow() {
+  orderRows.push(rowSeq++);
+  render();
+}
+
+function removeRow(rid) {
+  orderRows = orderRows.filter(function (r) { return r !== rid; });
+  if (orderRows.length === 0) orderRows = [rowSeq++];
+  render();
+}
+
+function wireSolicitud() {
+  var rows = document.querySelectorAll('#rows .form-row');
+  rows.forEach(function (row) {
+    var select = row.querySelector('.prod-select');
+    var qty = row.querySelector('.qty-input');
+    var sub = row.querySelector('.subtotal-display');
+    function update() {
+      var code = select.value;
+      var product = CATALOG.find(function (p) { return p.code === code; });
+      var q = parseInt(qty.value, 10) || 0;
+      sub.value = money(product.price * q);
+      updateTotal();
+    }
+    select.addEventListener('change', update);
+    qty.addEventListener('input', update);
+    update();
+  });
+  updateTotal();
+}
+
+function updateTotal() {
+  var subtotals = document.querySelectorAll('.subtotal-display');
+  var total = 0;
+  subtotals.forEach(function (s) {
+    var n = parseInt(s.value.replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(n)) total += n;
+  });
+  document.getElementById('totalValue').textContent = money(total);
+}
+
+function confirmOrder() {
+  document.getElementById('confirmMsg').style.display = 'block';
+}
+
+function renderPlaceholder(label) {
+  return '<div class="panel"><div class="placeholder">Vista previa de "' + label + '" — pendiente de construir cuando definamos el esquema de datos.</div></div>';
+}
+
+render();
+</script>
+</body>
+</html>
