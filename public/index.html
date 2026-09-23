@@ -107,8 +107,7 @@
   }
   .modal-overlay.open { display: flex; }
   .modal-box {
-    background: var(--card-bg, #fff); border-radius: 14px; max-width: 640px; width: 100%;
-    max-height: 80vh; overflow-y: auto; padding: 22px; position: relative;
+    max-width: 640px; width: 100%; max-height: 80vh; overflow-y: auto; position: relative;
   }
   .modal-close {
     position: absolute; top: 14px; right: 16px; border: none; background: none;
@@ -339,6 +338,15 @@
           </div>
         </div>
 
+        <div class="card" style="margin-bottom:16px; max-width:260px;">
+          <div class="lp-form-grid">
+            <div>
+              <label>Mes a revisar</label>
+              <input type="month" id="dashMesFiltro" min="2025-03" max="2026-07">
+            </div>
+          </div>
+        </div>
+
         <div class="kpi-grid">
           <div class="kpi">
             <div class="label" id="kpiMesLabel">Ventas del mes</div>
@@ -441,9 +449,11 @@
             <div class="section-title"><span class="dot"></span>Pedidos por mes — en vivo desde Solicitud de pedidos</div>
             <div class="card" style="margin-bottom:12px;">
               <div class="sub">Un producto por fila, para poder corroborar que cada pedido subido por los vendedores esté correcto: número, fecha, cliente, producto, línea, valor, canal y vendedor.</div>
-              <div style="margin-top:10px; max-width:220px;">
-                <label style="display:block; font-size:0.72rem; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">Mes a revisar</label>
-                <input type="month" id="ventasMesFiltro">
+              <div class="lp-form-grid" style="max-width:220px;">
+                <div>
+                  <label>Mes a revisar</label>
+                  <input type="month" id="ventasMesFiltro">
+                </div>
               </div>
             </div>
             <div class="card scrollx">
@@ -1030,7 +1040,7 @@
   </div>
 
 <div class="modal-overlay" id="clienteHistModal">
-  <div class="modal-box">
+  <div class="card modal-box">
     <button class="modal-close" id="clienteHistCerrar">✕</button>
     <h3 id="clienteHistNombre" style="margin-bottom:4px;"></h3>
     <div class="sub" id="clienteHistResumen" style="margin-bottom:14px;"></div>
@@ -1136,22 +1146,54 @@ document.querySelectorAll('.nav-sub').forEach(btn => {
 });
 
 
-document.getElementById('dashSubtitle').textContent = 'Resumen ejecutivo · mes de referencia: ' + DATA.mes_actual_label + ' (último mes completo disponible en el Drive)';
-document.getElementById('kpiMesLabel').textContent = 'Ventas de ' + DATA.mes_actual_label;
-document.getElementById('kpiVentasMes').textContent = fmtCOP(DATA.ventas_mes_actual);
-document.getElementById('kpiVentasMesSub').textContent = DATA.mes_actual_label.toLowerCase();
+document.getElementById('dashSubtitle').textContent = 'Resumen ejecutivo · datos cargados desde Drive';
 
-document.getElementById('kpiVentasAnio').textContent = fmtCOP(DATA.ventas_acumuladas_anio);
-document.getElementById('kpiVentasAnioSub').textContent = DATA.num_pedidos_2026 + ' pedidos (ene–may 2026)';
+function actualizarDashboardMes() {
+  const filtro = document.getElementById('dashMesFiltro').value; // "2026-07"
+  const [anioSel, mesSelNum] = filtro.split('-').map(Number);
+  const mesIdx = mesSelNum - 1;
+  const nombreMes = DATA.meses[mesIdx] + ' ' + anioSel;
 
-const compUp = DATA.comparativo_mes_pct >= 0;
-document.getElementById('kpiComparativo').textContent = (compUp ? '+' : '') + DATA.comparativo_mes_pct + '%';
-document.getElementById('kpiComparativoSub').textContent = fmtCOP(DATA.ventas_mismo_mes_anio_anterior) + ' en ' + DATA.mes_actual_label.split(' ')[0] + ' 2025';
+  const arrKey = 'ventas_' + anioSel + '_mensual';
+  const arrAnterior = 'ventas_' + (anioSel - 1) + '_mensual';
+  const tieneAnio = DATA[arrKey] !== undefined;
+  const ventasMes = tieneAnio ? (DATA[arrKey][mesIdx] || 0) : 0;
+  const ventasAcumAnio = tieneAnio ? DATA[arrKey].slice(0, mesIdx + 1).reduce((a, b) => a + b, 0) : 0;
+  const tieneAnioAnterior = DATA[arrAnterior] !== undefined;
+  const ventasMesAnterior = tieneAnioAnterior ? (DATA[arrAnterior][mesIdx] || 0) : null;
 
-document.getElementById('kpiTicketMes').textContent = fmtCOP(DATA.ticket_prom_mes);
+  document.getElementById('dashSubtitle').textContent = 'Resumen ejecutivo · mes seleccionado: ' + nombreMes;
+  document.getElementById('kpiMesLabel').textContent = 'Ventas de ' + nombreMes;
+  document.getElementById('kpiVentasMes').textContent = fmtCOP(ventasMes);
+  document.getElementById('kpiVentasMesSub').textContent = nombreMes.toLowerCase();
 
-document.getElementById('kpiClientesNuevos').textContent = DATA.clientes_nuevos_mes;
-document.getElementById('kpiClientesNuevosSub').textContent = 'de ' + DATA.clientes_total_mes + ' clientes en el mes';
+  document.getElementById('kpiVentasAnio').textContent = fmtCOP(ventasAcumAnio);
+  document.getElementById('kpiVentasAnioSub').textContent = 'acumulado ' + DATA.meses[0].toLowerCase() + '–' + DATA.meses[mesIdx].toLowerCase() + ' ' + anioSel;
+
+  if (ventasMesAnterior !== null && ventasMesAnterior > 0) {
+    const pct = Math.round(((ventasMes - ventasMesAnterior) / ventasMesAnterior) * 1000) / 10;
+    const compUp = pct >= 0;
+    document.getElementById('kpiComparativo').textContent = (compUp ? '+' : '') + pct + '%';
+    document.getElementById('kpiComparativoSub').textContent = fmtCOP(ventasMesAnterior) + ' en ' + DATA.meses[mesIdx].toLowerCase() + ' ' + (anioSel - 1);
+  } else {
+    document.getElementById('kpiComparativo').textContent = '—';
+    document.getElementById('kpiComparativoSub').textContent = 'sin datos de ' + (anioSel - 1) + ' para comparar';
+  }
+
+  // Estas tres tarjetas solo tienen dato exacto para el último mes cargado (julio 2026);
+  // para los demás meses mostramos "—" en vez de un número inventado.
+  const esMesConDatoExacto = (anioSel === 2026 && mesIdx === 6);
+  document.getElementById('kpiTicketMes').textContent = esMesConDatoExacto ? fmtCOP(DATA.ticket_prom_mes) : '—';
+  document.getElementById('kpiClientesNuevos').textContent = esMesConDatoExacto ? DATA.clientes_nuevos_mes : '—';
+  document.getElementById('kpiClientesNuevosSub').textContent = esMesConDatoExacto ? ('de ' + DATA.clientes_total_mes + ' clientes en el mes') : 'disponible solo para el último mes cargado';
+}
+
+try {
+  const dm = document.getElementById('dashMesFiltro');
+  dm.value = '2026-07';
+  dm.addEventListener('change', actualizarDashboardMes);
+  actualizarDashboardMes();
+} catch (e) {}
 
 document.getElementById('top5Sub').textContent = 'Semestre disponible: enero–mayo 2026 (el archivo aún no trae junio en adelante)';
 const tbodyTop5 = document.getElementById('tablaTop5');
@@ -1488,7 +1530,7 @@ function renderCrm() {
     rows.forEach(c => {
       const realIdx = CRM_CLIENTES.indexOf(c);
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${c.nombre}</td><td>${c.direccion || '—'}</td><td>${c.telefono || '—'}</td><td>${c.canal}</td><td><button class="lp-remove-btn crm-delete-btn" data-idx="${realIdx}" title="Borrar cliente" style="color:var(--danger,#b24a3b);">🗑</button></td>`;
+      tr.innerHTML = `<td>${c.nombre}</td><td>${c.direccion || '—'}</td><td>${c.telefono || '—'}</td><td>${c.canal}</td><td><button class="lp-remove-btn crm-delete-btn" data-idx="${realIdx}">Borrar</button></td>`;
       tr.querySelector('td').style.cursor = 'pointer';
       tr.addEventListener('click', (e) => {
         if (e.target.closest('.crm-delete-btn')) return;
