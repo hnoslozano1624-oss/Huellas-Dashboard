@@ -1,0 +1,18 @@
+{
+  "name": "huellas-dashboard",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "huellas-dashboard-db",
+      "database_id": "0edfea48-5459-4b95-a30a-7ffa378f0746"
+    }
+  ]
+}
