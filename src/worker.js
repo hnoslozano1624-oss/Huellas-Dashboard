@@ -119,7 +119,12 @@ async function handleApi(request, env, url) {
 
   // --- Órdenes de compra ---
   if (path === 'ordenes-compra' && method === 'GET') {
-    const { results } = await env.DB.prepare('SELECT * FROM ordenes_compra ORDER BY fecha DESC').all();
+    const { results } = await env.DB.prepare(
+      `SELECT oc.id, oc.fecha, oc.proveedor, oc.producto_id, p.codigo, p.nombre AS producto,
+              oc.cantidad, oc.costo_unitario, oc.estado
+       FROM ordenes_compra oc JOIN productos p ON p.id = oc.producto_id
+       ORDER BY oc.fecha DESC`
+    ).all();
     return json(results);
   }
   if (path === 'ordenes-compra' && method === 'POST') {
@@ -134,6 +139,39 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("UPDATE ordenes_compra SET estado = 'recibida' WHERE id = ?")
       .bind(recibirMatch[1]).run();
     return json({ ok: true });
+  }
+
+  // --- Cartera (saldo por pedido) y abonos ---
+  if (path === 'cartera' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT pe.id, pe.fecha, c.nombre AS cliente, u.nombre AS vendedor, pe.forma_pago, pe.total,
+              COALESCE((SELECT SUM(monto) FROM abonos WHERE pedido_id = pe.id), 0) AS abonado
+       FROM pedidos pe
+       JOIN clientes c ON c.id = pe.cliente_id
+       JOIN usuarios u ON u.id = pe.vendedor_id
+       WHERE pe.estado_pago = 'pendiente'
+       ORDER BY pe.fecha ASC`
+    ).all();
+    results.forEach(r => { r.saldo = r.total - r.abonado; });
+    return json(results);
+  }
+  const abonosMatch = path.match(/^pedidos\/(\d+)\/abonos$/);
+  if (abonosMatch && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      'SELECT id, monto, medio, fecha FROM abonos WHERE pedido_id = ? ORDER BY fecha ASC'
+    ).bind(abonosMatch[1]).all();
+    return json(results);
+  }
+  if (abonosMatch && method === 'POST') {
+    const b = await request.json();
+    const r = await env.DB.prepare(
+      'INSERT INTO abonos (pedido_id, monto, medio) VALUES (?, ?, ?)'
+    ).bind(abonosMatch[1], b.monto, b.medio).run();
+    const pedido = await env.DB.prepare(
+      `SELECT pe.total, COALESCE((SELECT SUM(monto) FROM abonos WHERE pedido_id = pe.id), 0) AS abonado, pe.estado_pago
+       FROM pedidos pe WHERE pe.id = ?`
+    ).bind(abonosMatch[1]).first();
+    return json({ id: r.meta.last_row_id, saldo: pedido.total - pedido.abonado, estado_pago: pedido.estado_pago });
   }
 
   // --- Flujo de caja ---

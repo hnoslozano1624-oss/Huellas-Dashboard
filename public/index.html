@@ -747,7 +747,7 @@
           <div class="card scrollx" style="margin-bottom:16px;">
             <div class="sub" id="carteraVacio">Todavía no hay pedidos a crédito. En cuanto un vendedor registre un pedido en Solicitud de pedidos con forma de pago a crédito, aparece aquí automáticamente.</div>
             <table id="carteraTable" style="display:none;">
-              <thead><tr><th>Cliente</th><th>Vendedor</th><th>Tipo de crédito</th><th>Fecha</th><th class="num">Valor</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Vendedor</th><th>Tipo de crédito</th><th>Fecha</th><th class="num">Total</th><th class="num">Abonado</th><th class="num">Saldo</th><th></th></tr></thead>
               <tbody id="carteraBody"></tbody>
             </table>
           </div>
@@ -2151,58 +2151,95 @@ function renderCartera() {
     [...CARTERA].reverse().forEach(c => {
       const tr = document.createElement('tr');
       tr.dataset.pedidoNum = c.pedidoNum;
-      tr.innerHTML = `<td>${c.cliente}</td><td>${c.vendedor}</td><td>${c.tipoCredito}</td><td>${c.fecha}</td><td class="num">${fmtCOPc(c.total)}</td><td><span class="tag warn">${c.estado}</span></td><td class="cartera-accion"><button class="lp-remove-btn cartera-pagar-btn" data-num="${c.pedidoNum}" style="color:var(--jade-dark);">Marcar pagado</button></td>`;
+      const saldo = c.saldo != null ? c.saldo : c.total;
+      tr.innerHTML = `<td>${c.cliente}</td><td>${c.vendedor}</td><td>${c.tipoCredito}</td><td>${c.fecha}</td>
+        <td class="num">${fmtCOPc(c.total)}</td>
+        <td class="num">${fmtCOPc(c.abonado || 0)}</td>
+        <td class="num"><b>${fmtCOPc(saldo)}</b></td>
+        <td class="cartera-accion">
+          <input type="number" class="cartera-abono-input" placeholder="Valor a abonar" style="width:120px; display:inline-block;">
+          <select class="cartera-abono-medio" style="width:110px; display:inline-block;">
+            <option>Efectivo</option><option>Transferencia</option>
+          </select>
+          <button class="lp-remove-btn cartera-abonar-btn" data-num="${c.pedidoNum}" style="color:var(--jade-dark);">Abonar</button>
+          <button class="lp-remove-btn cartera-pagartotal-btn" data-num="${c.pedidoNum}" style="color:var(--jade-dark); margin-left:6px;">Pago total</button>
+        </td>`;
       tbody.appendChild(tr);
     });
   }
-  document.getElementById('carteraTotal').textContent = fmtCOPc(CARTERA.reduce((s, c) => s + c.total, 0));
+  document.getElementById('carteraTotal').textContent = fmtCOPc(CARTERA.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0));
   document.getElementById('carteraCount').textContent = CARTERA.length;
 
   const kpiTotal = document.getElementById('kpiCarteraDash');
   if (kpiTotal) {
-    kpiTotal.textContent = fmtCOPc(CARTERA.reduce((s, c) => s + c.total, 0));
+    kpiTotal.textContent = fmtCOPc(CARTERA.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0));
     document.getElementById('kpiCarteraDashSub').textContent = CARTERA.length + (CARTERA.length === 1 ? ' cliente debe' : ' clientes deben');
   }
 
-  tbody.querySelectorAll('.cartera-pagar-btn').forEach(btn => {
+  tbody.querySelectorAll('.cartera-abonar-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const cell = btn.closest('.cartera-accion');
-      cell.innerHTML = `
-        <button class="lp-remove-btn cartera-medio-btn" data-num="${btn.dataset.num}" data-medio="Transferencia" style="color:var(--jade-dark);">Transferencia</button>
-        <button class="lp-remove-btn cartera-medio-btn" data-num="${btn.dataset.num}" data-medio="Efectivo" style="color:var(--jade-dark); margin-left:6px;">Efectivo</button>
-      `;
-      cell.querySelectorAll('.cartera-medio-btn').forEach(mb => {
-        mb.addEventListener('click', () => confirmarPagoCartera(mb.dataset.num, mb.dataset.medio));
-      });
+      const tr = btn.closest('tr');
+      const input = tr.querySelector('.cartera-abono-input');
+      const medio = tr.querySelector('.cartera-abono-medio').value;
+      const monto = parseFloat(input.value);
+      if (!monto || monto <= 0) { input.focus(); return; }
+      registrarAbonoCartera(btn.dataset.num, monto, medio);
+    });
+  });
+  tbody.querySelectorAll('.cartera-pagartotal-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tr = btn.closest('tr');
+      const medio = tr.querySelector('.cartera-abono-medio').value;
+      const c = CARTERA.find(x => x.pedidoNum === btn.dataset.num);
+      if (!c) return;
+      registrarAbonoCartera(btn.dataset.num, c.saldo != null ? c.saldo : c.total, medio);
     });
   });
 }
 try { renderCartera(); } catch (e) {}
 
-function sincronizarCarteraDesdeD1() {
-  CARTERA.length = 0;
-  PEDIDOS_HISTORIAL.filter(p => p.dbId && p.estadoPago === 'pendiente').forEach(p => {
-    CARTERA.push({
-      pedidoNum: p.pedidoNum, cliente: p.clienteNombre, vendedor: p.vendedor, total: p.total,
-      tipoCredito: p.formaPago, fecha: p.fecha, estado: 'Pendiente', dbId: p.dbId
-    });
-  });
+async function sincronizarCarteraDesdeD1() {
+  try {
+    const r = await fetch('/api/cartera');
+    if (r.ok) {
+      const filas = await r.json();
+      CARTERA.length = 0;
+      filas.forEach(f => {
+        const fechaF = new Date((f.fecha || '').replace(' ', 'T') + 'Z');
+        CARTERA.push({
+          pedidoNum: String(f.id), cliente: f.cliente, vendedor: f.vendedor, total: f.total,
+          abonado: f.abonado || 0, saldo: f.saldo,
+          tipoCredito: f.forma_pago, fecha: fechaF.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
+          estado: 'Pendiente', dbId: f.id
+        });
+      });
+    }
+  } catch (e) { console.error('No se pudo cargar la cartera real:', e); }
   try { renderCartera(); } catch (e) {}
 }
 
-function confirmarPagoCartera(pedidoNum, medio) {
+function registrarAbonoCartera(pedidoNum, monto, medio) {
   const idx = CARTERA.findIndex(c => c.pedidoNum === pedidoNum);
   if (idx < 0) return;
   const c = CARTERA[idx];
   const fecha = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
   const cuenta = medio === 'Transferencia' ? 'Bancos' : 'Efectivo';
-  registrarMovimientoCaja(cuenta, 'Ingreso', c.total, 'Pago cartera — ' + c.cliente + ' (' + c.pedidoNum + ')', fecha);
-  CARTERA.splice(idx, 1);
+  const saldoActual = c.saldo != null ? c.saldo : c.total;
+  const montoAplicado = Math.min(monto, saldoActual);
+
+  registrarMovimientoCaja(cuenta, 'Ingreso', montoAplicado, 'Abono cartera — ' + c.cliente + ' (' + c.pedidoNum + ')', fecha);
+
+  c.abonado = (c.abonado || 0) + montoAplicado;
+  c.saldo = c.total - c.abonado;
+  if (c.saldo <= 0) { CARTERA.splice(idx, 1); }
   renderCartera();
+
   if (c.dbId) {
-    fetch('/api/pedidos/' + c.dbId + '/estado-pago', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado_pago: 'pagado' })
-    }).catch(err => console.error('No se pudo marcar el pedido como pagado en la base de datos real:', err));
+    fetch('/api/pedidos/' + c.dbId + '/abonos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ monto: montoAplicado, medio: medio })
+    }).then((r) => { if (r.ok) sincronizarCarteraDesdeD1(); })
+      .catch(err => console.error('No se pudo registrar el abono en la base de datos real:', err));
   }
 }
 
@@ -3058,7 +3095,7 @@ document.getElementById('ocNueva').addEventListener('click', () => {
   renderOc();
 });
 
-document.getElementById('ocGuardar').addEventListener('click', () => {
+document.getElementById('ocGuardar').addEventListener('click', async () => {
   const statusEl = document.getElementById('ocStatus');
   const provSelVal = document.getElementById('ocProveedorSelect').value;
   if (!provSelVal) { statusEl.textContent = 'Falta seleccionar o crear el proveedor.'; return; }
@@ -3127,7 +3164,36 @@ document.getElementById('ocGuardar').addEventListener('click', () => {
   try { renderLista(); } catch (e) {}
   try { renderInventarioBase(); } catch (e) {}
 
-  statusEl.textContent = 'Orden ' + ocNum + ' guardada (' + fmtCOPc(ocTotalActual) + '). Costo, inventario y caja actualizados.';
+  // --- Guardado real en la base de datos ---
+  let ocGuardadaReal = 0;
+  for (const it of OC_ITEMS) {
+    const dbId = DB_PRODUCTO_ID[it.cod];
+    if (!dbId) continue;
+    try {
+      const rc = await fetch('/api/ordenes-compra', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proveedor: proveedorNombre, producto_id: dbId, cantidad: it.cantidad, costo_unitario: it.valor })
+      });
+      if (rc.ok) {
+        const creada = await rc.json();
+        await fetch('/api/ordenes-compra/' + creada.id + '/recibir', { method: 'PATCH' });
+        ocGuardadaReal++;
+      }
+    } catch (e) { console.error('No se pudo guardar la orden de compra en la base de datos real:', e); }
+  }
+  if (ocGuardadaReal > 0) {
+    try {
+      const ri = await fetch('/api/inventario');
+      if (ri.ok) {
+        const inv = await ri.json();
+        inv.forEach(i => { INVENTARIO_STOCK[i.codigo || ('ID' + i.producto_id)] = i.cantidad_disponible; });
+        try { renderInventarioBase(); } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  statusEl.textContent = 'Orden ' + ocNum + ' guardada (' + fmtCOPc(ocTotalActual) + '). Costo, inventario y caja actualizados.' +
+    (ocGuardadaReal > 0 ? ' Guardada en la base de datos real.' : '');
 });
 
 try {
