@@ -28,12 +28,26 @@ async function handleApi(request, env, url) {
     ).bind(b.codigo, b.nombre, b.categoria, b.precio_unitario, b.costo_unitario ?? null).run();
     return json({ codigo: b.codigo });
   }
+  const productoIdMatch = path.match(/^productos\/(\d+)$/);
+  if (productoIdMatch && method === 'PATCH') {
+    const id = productoIdMatch[1];
+    const b = await request.json();
+    const campos = [];
+    const valores = [];
+    if ('codigo' in b) { campos.push('codigo = ?'); valores.push(b.codigo || null); }
+    if ('costo_unitario' in b) { campos.push('costo_unitario = ?'); valores.push(b.costo_unitario); }
+    if ('precio_unitario' in b) { campos.push('precio_unitario = ?'); valores.push(b.precio_unitario); }
+    if (campos.length === 0) return json({ error: 'Nada para actualizar' }, 400);
+    valores.push(id);
+    await env.DB.prepare(`UPDATE productos SET ${campos.join(', ')} WHERE id = ?`).bind(...valores).run();
+    return json({ ok: true });
+  }
 
   // --- Inventario ---
   if (path === 'inventario' && method === 'GET') {
     const { results } = await env.DB.prepare(
-      `SELECT i.producto_codigo, p.nombre, p.categoria, i.cantidad_disponible, i.actualizado_en
-       FROM inventario i JOIN productos p ON p.codigo = i.producto_codigo
+      `SELECT i.producto_id, p.codigo, p.nombre, p.categoria, i.cantidad_disponible, i.actualizado_en
+       FROM inventario i JOIN productos p ON p.id = i.producto_id
        ORDER BY p.categoria, p.nombre`
     ).all();
     return json(results);
@@ -62,6 +76,16 @@ async function handleApi(request, env, url) {
        JOIN usuarios u ON u.id = pe.vendedor_id
        ORDER BY pe.fecha DESC`
     ).all();
+    const { results: detalles } = await env.DB.prepare(
+      `SELECT dp.pedido_id, dp.cantidad, dp.subtotal, p.nombre AS producto, p.categoria
+       FROM detalle_pedido dp JOIN productos p ON p.id = dp.producto_id`
+    ).all();
+    const porPedido = {};
+    detalles.forEach(d => {
+      if (!porPedido[d.pedido_id]) porPedido[d.pedido_id] = [];
+      porPedido[d.pedido_id].push({ producto: d.producto, categoria: d.categoria, cantidad: d.cantidad, valor: d.subtotal });
+    });
+    results.forEach(p => { p.items = porPedido[p.id] || []; });
     return json(results);
   }
   if (path === 'pedidos' && method === 'POST') {
@@ -75,13 +99,13 @@ async function handleApi(request, env, url) {
     ).run();
     const pedidoId = r.meta.last_row_id;
     for (const item of b.items || []) {
-      const prod = await env.DB.prepare('SELECT precio_unitario FROM productos WHERE codigo = ?')
-        .bind(item.producto_codigo).first();
+      const prod = await env.DB.prepare('SELECT precio_unitario FROM productos WHERE id = ?')
+        .bind(item.producto_id).first();
       if (!prod) continue;
       const subtotal = prod.precio_unitario * item.cantidad;
       await env.DB.prepare(
-        'INSERT INTO detalle_pedido (pedido_id, producto_codigo, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)'
-      ).bind(pedidoId, item.producto_codigo, item.cantidad, prod.precio_unitario, subtotal).run();
+        'INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)'
+      ).bind(pedidoId, item.producto_id, item.cantidad, prod.precio_unitario, subtotal).run();
     }
     return json({ id: pedidoId });
   }
@@ -101,8 +125,8 @@ async function handleApi(request, env, url) {
   if (path === 'ordenes-compra' && method === 'POST') {
     const b = await request.json();
     const r = await env.DB.prepare(
-      'INSERT INTO ordenes_compra (proveedor, producto_codigo, cantidad, costo_unitario) VALUES (?, ?, ?, ?)'
-    ).bind(b.proveedor, b.producto_codigo, b.cantidad, b.costo_unitario).run();
+      'INSERT INTO ordenes_compra (proveedor, producto_id, cantidad, costo_unitario) VALUES (?, ?, ?, ?)'
+    ).bind(b.proveedor, b.producto_id, b.cantidad, b.costo_unitario).run();
     return json({ id: r.meta.last_row_id });
   }
   const recibirMatch = path.match(/^ordenes-compra\/(\d+)\/recibir$/);
@@ -126,6 +150,12 @@ async function handleApi(request, env, url) {
   }
 
   // --- Usuarios / login ---
+  if (path === 'usuarios' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      'SELECT id, nombre, usuario, rol FROM usuarios WHERE activo = 1 ORDER BY nombre'
+    ).all();
+    return json(results);
+  }
   if (path === 'usuarios' && method === 'POST') {
     const b = await request.json();
     const hash = await sha256(b.password);

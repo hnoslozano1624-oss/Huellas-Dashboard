@@ -807,7 +807,7 @@
                 <select id="cotRealizadaPor">
                   <option value="Juliet Lievano">Juliet Lievano</option>
                   <option value="Laura Robayo">Laura Robayo</option>
-                  <option value="Diana Lievano">Diana Lievano</option>
+                  <option value="Katherine Lievano">Katherine Lievano</option>
                 </select>
               </div>
             </div>
@@ -971,7 +971,7 @@
               <select id="pedVendedor">
                 <option value="">Selecciona...</option>
                 <option value="Juliet Lievano">Juliet Lievano</option>
-                <option value="Diana Lievano">Diana Lievano</option>
+                <option value="Katherine Lievano">Katherine Lievano</option>
                 <option value="Laura Robayo">Laura Robayo</option>
               </select>
             </div>
@@ -1403,9 +1403,10 @@ function renderLista() {
   });
 
   tbody.querySelectorAll('input').forEach(inp => {
-    inp.addEventListener('change', (e) => {
+    inp.addEventListener('change', async (e) => {
       const product = rows[parseInt(e.target.dataset.idx)];
       const field = e.target.dataset.field;
+      const codigoAnterior = product.cod;
       product[field] = field === 'cod' ? e.target.value.trim().toUpperCase() : (parseFloat(e.target.value) || null);
       if (field === 'cod' && product[field]) {
         e.target.outerHTML = product[field] + ' <span class="lp-badge ok">✓ a inventario</span>';
@@ -1424,6 +1425,26 @@ function renderLista() {
         }
       }
       updateLpSummary();
+
+      // Guardar el cambio en la base de datos real (código, costo o precio)
+      if (['cod','costo','precio'].includes(field)) {
+        const dbId = DB_PRODUCTO_ID[codigoAnterior];
+        if (dbId) {
+          const body = {};
+          if (field === 'cod') body.codigo = product.cod;
+          if (field === 'costo') body.costo_unitario = product.costo;
+          if (field === 'precio') body.precio_unitario = product.precio;
+          try {
+            await fetch('/api/productos/' + dbId, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+            });
+            if (field === 'cod') {
+              delete DB_PRODUCTO_ID[codigoAnterior];
+              DB_PRODUCTO_ID[product.cod] = dbId;
+            }
+          } catch (err) { console.error('No se pudo guardar el cambio en la base de datos real:', err); }
+        }
+      }
     });
   });
 
@@ -1559,6 +1580,113 @@ document.getElementById('lpAddSubmit').addEventListener('click', () => {
 
 // ---- CRM ----
 let CRM_CLIENTES = [];
+let DB_PRODUCTO_ID = {}; // cod (o ID sintético) -> id real en D1
+let DB_CLIENTE_ID = {};  // nombre -> id real en D1
+let DB_USUARIO_ID = {};  // nombre -> id real en D1
+let DB_CONECTADO = { productos: false, clientes: false, usuarios: false };
+
+async function cargarDatosReales() {
+  try {
+    const r = await fetch('/api/productos');
+    if (r.ok) {
+      const productos = await r.json();
+      if (Array.isArray(productos) && productos.length > 0) {
+        LISTA_PRECIOS.length = 0;
+        productos.forEach(p => {
+          const cod = p.codigo || ('ID' + p.id);
+          DB_PRODUCTO_ID[cod] = p.id;
+          LISTA_PRECIOS.push({
+            categoria: p.categoria, cod: cod, marca: '', producto: p.nombre, present: '',
+            costo: p.costo_unitario, precio: p.precio_unitario, margen: null,
+            laika: null, agrocampo: null, ceba: null, puppys: null, comp_min: null
+          });
+        });
+        DB_CONECTADO.productos = true;
+      }
+    }
+  } catch (e) { console.error('No se pudo cargar el catálogo real:', e); }
+
+  try {
+    const r2 = await fetch('/api/clientes');
+    if (r2.ok) {
+      const clientes = await r2.json();
+      if (Array.isArray(clientes) && clientes.length > 0) {
+        CRM_CLIENTES.length = 0;
+        clientes.forEach(c => {
+          DB_CLIENTE_ID[c.nombre] = c.id;
+          CRM_CLIENTES.push({ nombre: c.nombre, direccion: c.direccion || '', telefono: c.celular || '', canal: '' });
+        });
+        DB_CONECTADO.clientes = true;
+      }
+    }
+  } catch (e) { console.error('No se pudo cargar el CRM real:', e); }
+
+  try {
+    const r3 = await fetch('/api/usuarios');
+    if (r3.ok) {
+      const usuarios = await r3.json();
+      usuarios.forEach(u => { DB_USUARIO_ID[u.nombre] = u.id; });
+      if (usuarios.length > 0) DB_CONECTADO.usuarios = true;
+    }
+  } catch (e) { console.error('No se pudo cargar la lista de usuarios real:', e); }
+
+  try {
+    const r4 = await fetch('/api/inventario');
+    if (r4.ok) {
+      const inv = await r4.json();
+      inv.forEach(i => {
+        const cod = i.codigo || ('ID' + i.producto_id);
+        INVENTARIO_STOCK[cod] = i.cantidad_disponible;
+      });
+    }
+  } catch (e) { console.error('No se pudo cargar el inventario real:', e); }
+
+  try {
+    const r5 = await fetch('/api/pedidos');
+    if (r5.ok) {
+      const pedidosDb = await r5.json();
+      PEDIDOS_HISTORIAL.length = 0;
+      pedidosDb.forEach(p => {
+        const fechaRaw = new Date((p.fecha || '').replace(' ', 'T') + 'Z');
+        PEDIDOS_HISTORIAL.push({
+          pedidoNum: String(p.id), fechaRaw: fechaRaw,
+          fecha: fechaRaw.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
+          vendedor: p.vendedor, clienteNombre: p.cliente, clienteCanal: p.canal,
+          items: (p.items || []).map(it => ({ producto: it.producto, linea: it.categoria, cantidad: it.cantidad, valor: it.valor })),
+          formaPago: p.forma_pago, observaciones: '', total: p.total, estadoPago: p.estado_pago, dbId: p.id
+        });
+      });
+    }
+  } catch (e) { console.error('No se pudo cargar el historial real de pedidos:', e); }
+
+  try {
+    const r6 = await fetch('/api/flujo-caja');
+    if (r6.ok) {
+      const mov = await r6.json();
+      FLUJO_CAJA_MOVIMIENTOS.length = 0;
+      CAJA_EFECTIVO = 0; CAJA_BANCOS = 0;
+      mov.slice().reverse().forEach(m => {
+        const cuenta = m.medio === 'Efectivo' ? 'Efectivo' : 'Bancos';
+        const tipo = m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto';
+        const valor = m.monto;
+        if (cuenta === 'Efectivo') CAJA_EFECTIVO += (tipo === 'Ingreso' ? valor : -valor);
+        else CAJA_BANCOS += (tipo === 'Ingreso' ? valor : -valor);
+        FLUJO_CAJA_MOVIMIENTOS.push({
+          fecha: new Date((m.fecha || '').replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
+          concepto: m.descripcion, cuenta: cuenta, tipo: tipo, valor: valor
+        });
+      });
+      try { renderCajaMovimientos(); } catch (e) {}
+    }
+  } catch (e) { console.error('No se pudo cargar el flujo de caja real:', e); }
+
+  try { refreshPedClienteSelect(); } catch (e) {}
+  try { renderCrm(); } catch (e) {}
+  try { renderInventarioBase(); } catch (e) {}
+  try { renderVentasPedidos(); } catch (e) {}
+  try { sincronizarCarteraDesdeD1(); } catch (e) {}
+}
+cargarDatosReales();
 const CRM_CANALES = ['Conocido / Voz a voz', 'WhatsApp / Pauta', 'Redes sociales / Grupos', 'Volantes', 'Ferias o eventos'];
 
 function initCrmFiltro() {
@@ -2051,6 +2179,17 @@ function renderCartera() {
 }
 try { renderCartera(); } catch (e) {}
 
+function sincronizarCarteraDesdeD1() {
+  CARTERA.length = 0;
+  PEDIDOS_HISTORIAL.filter(p => p.dbId && p.estadoPago === 'pendiente').forEach(p => {
+    CARTERA.push({
+      pedidoNum: p.pedidoNum, cliente: p.clienteNombre, vendedor: p.vendedor, total: p.total,
+      tipoCredito: p.formaPago, fecha: p.fecha, estado: 'Pendiente', dbId: p.dbId
+    });
+  });
+  try { renderCartera(); } catch (e) {}
+}
+
 function confirmarPagoCartera(pedidoNum, medio) {
   const idx = CARTERA.findIndex(c => c.pedidoNum === pedidoNum);
   if (idx < 0) return;
@@ -2060,6 +2199,11 @@ function confirmarPagoCartera(pedidoNum, medio) {
   registrarMovimientoCaja(cuenta, 'Ingreso', c.total, 'Pago cartera — ' + c.cliente + ' (' + c.pedidoNum + ')', fecha);
   CARTERA.splice(idx, 1);
   renderCartera();
+  if (c.dbId) {
+    fetch('/api/pedidos/' + c.dbId + '/estado-pago', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado_pago: 'pagado' })
+    }).catch(err => console.error('No se pudo marcar el pedido como pagado en la base de datos real:', err));
+  }
 }
 
 function registrarMovimientoCaja(cuenta, tipo, valor, concepto, fecha) {
@@ -2070,6 +2214,13 @@ function registrarMovimientoCaja(cuenta, tipo, valor, concepto, fecha) {
   }
   FLUJO_CAJA_MOVIMIENTOS.push({ fecha: fecha, concepto: concepto, cuenta: cuenta, tipo: tipo, valor: valor });
   try { renderCajaMovimientos(); } catch (e) {}
+  fetch('/api/flujo-caja', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tipo: tipo === 'Ingreso' ? 'ingreso' : 'gasto', categoria: cuenta, monto: valor,
+      descripcion: concepto, medio: cuenta
+    })
+  }).catch(err => console.error('No se pudo registrar el movimiento en el flujo de caja real:', err));
 }
 
 function renderCajaMovimientos() {
@@ -2386,7 +2537,7 @@ document.getElementById('pedNueva').addEventListener('click', () => {
   renderPedido();
 });
 
-document.getElementById('pedEnviar').addEventListener('click', () => {
+document.getElementById('pedEnviar').addEventListener('click', async () => {
   const statusEl = document.getElementById('pedStatus');
   const vendedor = document.getElementById('pedVendedor').value;
   if (!vendedor) { statusEl.textContent = 'Falta seleccionar el vendedor.'; return; }
@@ -2409,6 +2560,13 @@ document.getElementById('pedEnviar').addEventListener('click', () => {
     clienteCanal = nuevoCliente.canal;
     refreshPedClienteSelect();
     try { renderCrm(); } catch (e) {}
+    try {
+      const rc = await fetch('/api/clientes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: nuevoCliente.nombre, celular: nuevoCliente.telefono, direccion: nuevoCliente.direccion })
+      });
+      if (rc.ok) { const created = await rc.json(); DB_CLIENTE_ID[nombre] = created.id; }
+    } catch (e) { console.error('No se pudo crear el cliente en la base de datos real:', e); }
   } else {
     const idx = parseInt(clienteSelVal.replace('idx:', ''));
     clienteNombre = CRM_CLIENTES[idx].nombre;
@@ -2479,6 +2637,57 @@ document.getElementById('pedEnviar').addEventListener('click', () => {
   }
   try { renderCartera(); } catch (e) {}
 
+  // --- Guardado real en la base de datos (además de la simulación local de arriba) ---
+  let guardadoReal = false;
+  try {
+    const vendedorId = DB_USUARIO_ID[vendedor];
+    const clienteId = DB_CLIENTE_ID[clienteNombre];
+    if (vendedorId && clienteId) {
+      const itemsReales = itemsConLinea
+        .filter(it => DB_PRODUCTO_ID[it.cod])
+        .map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad }));
+      if (itemsReales.length > 0) {
+        const rp = await fetch('/api/pedidos', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cliente_id: clienteId, vendedor_id: vendedorId, canal: clienteCanal || 'CONOCIDO / VOZ A VOZ',
+            forma_pago: formaPago, observaciones: observaciones, items: itemsReales
+          })
+        });
+        if (rp.ok) {
+          guardadoReal = true;
+          try {
+            const ri = await fetch('/api/inventario');
+            if (ri.ok) {
+              const inv = await ri.json();
+              inv.forEach(i => { INVENTARIO_STOCK[i.codigo || ('ID' + i.producto_id)] = i.cantidad_disponible; });
+              try { renderInventarioBase(); } catch (e) {}
+            }
+          } catch (e) {}
+          try {
+            const rpe = await fetch('/api/pedidos');
+            if (rpe.ok) {
+              const pedidosDb = await rpe.json();
+              PEDIDOS_HISTORIAL.length = 0;
+              pedidosDb.forEach(p => {
+                const fechaRawDb = new Date((p.fecha || '').replace(' ', 'T') + 'Z');
+                PEDIDOS_HISTORIAL.push({
+                  pedidoNum: String(p.id), fechaRaw: fechaRawDb,
+                  fecha: fechaRawDb.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
+                  vendedor: p.vendedor, clienteNombre: p.cliente, clienteCanal: p.canal,
+                  items: (p.items || []).map(it => ({ producto: it.producto, linea: it.categoria, cantidad: it.cantidad, valor: it.valor })),
+                  formaPago: p.forma_pago, observaciones: '', total: p.total, estadoPago: p.estado_pago, dbId: p.id
+                });
+              });
+              try { renderVentasPedidos(); } catch (e) {}
+              try { sincronizarCarteraDesdeD1(); } catch (e) {}
+            }
+          } catch (e) {}
+        }
+      }
+    }
+  } catch (e) { console.error('No se pudo guardar el pedido en la base de datos real:', e); }
+
   PED_EDITING_NUM = null;
   PED_EDITING_ORIGINAL = null;
   PED_ITEMS = [];
@@ -2495,7 +2704,8 @@ document.getElementById('pedEnviar').addEventListener('click', () => {
   renderPedido();
   renderPedHistorial();
 
-  statusEl.textContent = (existingIdx >= 0 ? 'Pedido ' + pedidoNum + ' corregido (' : 'Pedido enviado (') + fmtCOPc(total) + '). Inventario y cartera ajustados.';
+  statusEl.textContent = (existingIdx >= 0 ? 'Pedido ' + pedidoNum + ' corregido (' : 'Pedido enviado (') + fmtCOPc(total) + '). Inventario y cartera ajustados.' +
+    (guardadoReal ? ' Guardado en la base de datos — quedó permanente.' : ' ⚠ No se pudo confirmar el guardado permanente; revisa tu conexión.');
 });
 
 try {
