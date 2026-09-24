@@ -345,7 +345,7 @@
           <div class="lp-form-grid">
             <div>
               <label>Mes a revisar</label>
-              <input type="month" id="dashMesFiltro" min="2025-03" max="2026-07">
+              <input type="month" id="dashMesFiltro" min="2025-03" max="2026-12">
             </div>
           </div>
         </div>
@@ -552,9 +552,19 @@
               <input type="text" id="invSearch" placeholder="Buscar por marca o producto...">
               <select id="invCategoria"><option value="">Todas las categorías</option></select>
             </div>
+            <div style="margin-top:12px; display:flex; gap:8px;">
+              <button id="invTabTodos" class="lp-add-btn inv-tab-btn inv-tab-active">Catálogo completo</button>
+              <button id="invTabDisponibles" class="lp-add-btn inv-tab-btn">✓ Solo disponibles</button>
+            </div>
           </div>
 
-          <div class="card scrollx">
+          <div class="card" id="invDisponiblesWrap" style="display:none;">
+            <div class="sub" id="invDisponiblesResumen"></div>
+            <div id="invDisponiblesGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin-top:12px;"></div>
+            <div class="sub" id="invDisponiblesVacio" style="display:none; padding:20px 0; text-align:center;">Todavía no hay productos con stock disponible.</div>
+          </div>
+
+          <div class="card scrollx" id="invTablaWrap">
             <div class="sub">Base de productos: llega automáticamente desde Listado de precios en cuanto un producto tiene código. La columna "Disponible" se alimenta de las órdenes de compra guardadas (salidas por ventas aún no están conectadas).</div>
             <table id="invTable">
               <thead>
@@ -1189,6 +1199,12 @@ document.querySelectorAll('.nav-sub').forEach(btn => {
 
 document.getElementById('dashSubtitle').textContent = 'Resumen ejecutivo · datos cargados desde Drive';
 
+function ventasRealesDelMes(anio, mesIdx) {
+  return PEDIDOS_HISTORIAL
+    .filter(p => p.dbId && p.fechaRaw.getFullYear() === anio && p.fechaRaw.getMonth() === mesIdx)
+    .reduce((s, p) => s + p.total, 0);
+}
+
 function actualizarDashboardMes() {
   const filtro = document.getElementById('dashMesFiltro').value; // "2026-07"
   const [anioSel, mesSelNum] = filtro.split('-').map(Number);
@@ -1198,10 +1214,17 @@ function actualizarDashboardMes() {
   const arrKey = 'ventas_' + anioSel + '_mensual';
   const arrAnterior = 'ventas_' + (anioSel - 1) + '_mensual';
   const tieneAnio = DATA[arrKey] !== undefined;
-  const ventasMes = tieneAnio ? (DATA[arrKey][mesIdx] || 0) : 0;
-  const ventasAcumAnio = tieneAnio ? DATA[arrKey].slice(0, mesIdx + 1).reduce((a, b) => a + b, 0) : 0;
-  const tieneAnioAnterior = DATA[arrAnterior] !== undefined;
-  const ventasMesAnterior = tieneAnioAnterior ? (DATA[arrAnterior][mesIdx] || 0) : null;
+
+  const valorMes = (anio, idx) => {
+    const estatico = (DATA['ventas_' + anio + '_mensual'] || [])[idx] || 0;
+    return estatico > 0 ? estatico : ventasRealesDelMes(anio, idx);
+  };
+
+  const ventasMes = valorMes(anioSel, mesIdx);
+  let ventasAcumAnio = 0;
+  for (let i = 0; i <= mesIdx; i++) ventasAcumAnio += valorMes(anioSel, i);
+  const ventasMesAnteriorCalc = valorMes(anioSel - 1, mesIdx);
+  const ventasMesAnterior = ventasMesAnteriorCalc > 0 ? ventasMesAnteriorCalc : null;
 
   document.getElementById('dashSubtitle').textContent = 'Resumen ejecutivo · mes seleccionado: ' + nombreMes;
   document.getElementById('kpiMesLabel').textContent = 'Ventas de ' + nombreMes;
@@ -1458,6 +1481,62 @@ function updateLpSummary() {
   updateInventarioSummary();
 }
 
+function renderInventarioDisponibles() {
+  const search = (document.getElementById('invSearch').value || '').trim().toLowerCase();
+  const cat = document.getElementById('invCategoria').value;
+
+  const disponibles = LISTA_PRECIOS.filter(p => {
+    if (!p.cod) return false;
+    const cantidad = (typeof INVENTARIO_STOCK !== 'undefined' && INVENTARIO_STOCK[p.cod]) || 0;
+    if (cantidad <= 0) return false;
+    if (cat && p.categoria !== cat) return false;
+    if (search && !(p.marca + ' ' + p.producto).toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a, b) => a.categoria.localeCompare(b.categoria) || a.producto.localeCompare(b.producto));
+
+  const grid = document.getElementById('invDisponiblesGrid');
+  const vacio = document.getElementById('invDisponiblesVacio');
+  const resumen = document.getElementById('invDisponiblesResumen');
+  grid.innerHTML = '';
+
+  if (disponibles.length === 0) {
+    vacio.style.display = 'block';
+    resumen.textContent = 'Referencias con stock disponible ahora mismo: 0';
+    return;
+  }
+  vacio.style.display = 'none';
+  const totalUnidades = disponibles.reduce((s, p) => s + ((INVENTARIO_STOCK[p.cod]) || 0), 0);
+  resumen.textContent = `Referencias con stock disponible ahora mismo: ${disponibles.length} · ${totalUnidades} unidades en total`;
+
+  disponibles.forEach(p => {
+    const cantidad = INVENTARIO_STOCK[p.cod] || 0;
+    const nivel = cantidad <= 3 ? 'var(--danger, #B24A3B)' : (cantidad <= 8 ? '#B8860B' : 'var(--jade-dark, #3F7364)');
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--card-border); border-radius:12px; padding:14px; background:var(--bg);';
+    card.innerHTML = `
+      <div style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; margin-bottom:4px;">${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</div>
+      <div style="font-weight:600; font-size:0.9rem; margin-bottom:2px;">${p.producto}</div>
+      <div style="font-size:0.78rem; color:var(--muted); margin-bottom:10px;">${p.marca}${p.present ? ' · ' + p.present : ''} · ${p.cod}</div>
+      <div style="font-size:1.4rem; font-weight:700; color:${nivel};">${cantidad} <span style="font-size:0.7rem; font-weight:400; color:var(--muted);">disponibles</span></div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById('invTabTodos').addEventListener('click', () => {
+  document.getElementById('invTabTodos').classList.remove('lp-add-cancel');
+  document.getElementById('invTabDisponibles').classList.add('lp-add-cancel');
+  document.getElementById('invTablaWrap').style.display = '';
+  document.getElementById('invDisponiblesWrap').style.display = 'none';
+});
+document.getElementById('invTabDisponibles').addEventListener('click', () => {
+  document.getElementById('invTabDisponibles').classList.remove('lp-add-cancel');
+  document.getElementById('invTabTodos').classList.add('lp-add-cancel');
+  document.getElementById('invTablaWrap').style.display = 'none';
+  document.getElementById('invDisponiblesWrap').style.display = '';
+  renderInventarioDisponibles();
+});
+
 function updateInventarioSummary() {
   const conCodigo = document.getElementById('invConCodigo');
   const sinCodigo = document.getElementById('invSinCodigo');
@@ -1506,6 +1585,11 @@ function renderInventarioBase() {
     `;
     tbody.appendChild(tr);
   });
+
+  const wrapDisp = document.getElementById('invDisponiblesWrap');
+  if (wrapDisp && wrapDisp.style.display !== 'none') {
+    try { renderInventarioDisponibles(); } catch (e) {}
+  }
 }
 
 document.getElementById('lpSearch').addEventListener('input', renderLista);
@@ -1685,6 +1769,7 @@ async function cargarDatosReales() {
   try { renderInventarioBase(); } catch (e) {}
   try { renderVentasPedidos(); } catch (e) {}
   try { sincronizarCarteraDesdeD1(); } catch (e) {}
+  try { actualizarDashboardMes(); } catch (e) {}
 }
 cargarDatosReales();
 const CRM_CANALES = ['Conocido / Voz a voz', 'WhatsApp / Pauta', 'Redes sociales / Grupos', 'Volantes', 'Ferias o eventos'];
@@ -2718,6 +2803,7 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
               });
               try { renderVentasPedidos(); } catch (e) {}
               try { sincronizarCarteraDesdeD1(); } catch (e) {}
+              try { actualizarDashboardMes(); } catch (e) {}
             }
           } catch (e) {}
         }
