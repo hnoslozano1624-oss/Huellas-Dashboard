@@ -2917,13 +2917,46 @@ function renderVentasPedidos() {
     table.style.display = ''; vacio.style.display = 'none';
     rows.forEach(r => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.pedidoNum}</td><td>${r.fecha}</td><td>${r.cliente}</td><td>${r.producto}</td><td>${r.linea}</td><td class="num">${fmtCOPc(r.valor)}</td><td>${r.canal || '—'}</td><td>${r.vendedor}</td><td><button class="lp-remove-btn ventas-edit-btn" data-num="${r.pedidoNum}" style="color:var(--jade-dark);">Editar</button></td>`;
+      tr.innerHTML = `<td>${r.pedidoNum}</td><td>${r.fecha}</td><td>${r.cliente}</td><td>${r.producto}</td><td>${r.linea}</td><td class="num">${fmtCOPc(r.valor)}</td><td>${r.canal || '—'}</td><td>${r.vendedor}</td><td><button class="lp-remove-btn ventas-edit-btn" data-num="${r.pedidoNum}" style="color:var(--jade-dark);">Editar</button> <button class="lp-remove-btn ventas-del-btn" data-num="${r.pedidoNum}">Eliminar</button></td>`;
       tbody.appendChild(tr);
     });
   }
   tbody.querySelectorAll('.ventas-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => cargarPedidoParaEditar(btn.dataset.num));
   });
+  tbody.querySelectorAll('.ventas-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => eliminarPedido(btn.dataset.num));
+  });
+}
+
+async function eliminarPedido(pedidoNum) {
+  const pedido = PEDIDOS_HISTORIAL.find(p => p.pedidoNum === pedidoNum);
+  if (!pedido) return;
+  if (!confirm('¿Eliminar el pedido ' + pedidoNum + ' de ' + pedido.clienteNombre + ' por ' + fmtCOPc(pedido.total) + '? El inventario descontado se devuelve automáticamente. Esta acción no se puede deshacer.')) return;
+
+  PEDIDOS_HISTORIAL = PEDIDOS_HISTORIAL.filter(p => p.pedidoNum !== pedidoNum);
+  try { renderVentasPedidos(); } catch (e) {}
+
+  if (!pedido.dbId) return; // pedido solo local (no se guardó en la base de datos real)
+
+  try {
+    const r = await fetch('/api/pedidos/' + pedido.dbId, { method: 'DELETE' });
+    if (r.ok) {
+      const ri = await fetch('/api/inventario');
+      if (ri.ok) {
+        const inv = await ri.json();
+        inv.forEach(i => { INVENTARIO_STOCK[i.codigo || ('ID' + i.producto_id)] = i.cantidad_disponible; });
+        try { renderInventarioBase(); } catch (e) {}
+      }
+      try { await sincronizarCarteraDesdeD1(); } catch (e) {}
+      try { actualizarDashboardMes(); } catch (e) {}
+    } else {
+      alert('No se pudo eliminar el pedido en la base de datos real. Vuelve a intentarlo.');
+    }
+  } catch (e) {
+    console.error('Error eliminando pedido en la base de datos real:', e);
+    alert('No se pudo eliminar el pedido en la base de datos real. Revisa tu conexión.');
+  }
 }
 try {
   const vf = document.getElementById('ventasMesFiltro');

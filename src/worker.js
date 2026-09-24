@@ -116,6 +116,14 @@ async function handleApi(request, env, url) {
       .bind(b.estado_pago, estadoPagoMatch[1]).run();
     return json({ ok: true });
   }
+  const pedidoDeleteMatch = path.match(/^pedidos\/(\d+)$/);
+  if (pedidoDeleteMatch && method === 'DELETE') {
+    const id = pedidoDeleteMatch[1];
+    await env.DB.prepare('DELETE FROM abonos WHERE pedido_id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM detalle_pedido WHERE pedido_id = ?').bind(id).run();
+    await env.DB.prepare('DELETE FROM pedidos WHERE id = ?').bind(id).run();
+    return json({ ok: true });
+  }
 
   // --- Órdenes de compra ---
   if (path === 'ordenes-compra' && method === 'GET') {
