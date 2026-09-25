@@ -2802,13 +2802,16 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
     if (vendedorId && clienteId) {
       const itemsReales = itemsConLinea
         .filter(it => DB_PRODUCTO_ID[it.cod])
-        .map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad }));
+        .map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad, precio_unitario: it.cantidad ? it.valor / it.cantidad : 0 }));
       if (itemsReales.length > 0) {
+        const fechaParaDB = fechaSeleccionada.getFullYear() + '-' +
+          String(fechaSeleccionada.getMonth() + 1).padStart(2, '0') + '-' +
+          String(fechaSeleccionada.getDate()).padStart(2, '0') + ' 12:00:00';
         const rp = await fetch('/api/pedidos', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             cliente_id: clienteId, vendedor_id: vendedorId, canal: clienteCanal || 'CONOCIDO / VOZ A VOZ',
-            forma_pago: formaPago, observaciones: observaciones, items: itemsReales
+            forma_pago: formaPago, observaciones: observaciones, items: itemsReales, fecha: fechaParaDB
           })
         });
         if (rp.ok) {
@@ -3529,15 +3532,10 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
   const gate = document.getElementById('loginGate');
   const errorEl = document.getElementById('loginError');
 
-  if (localStorage.getItem('huellas_sesion') === 'ok') {
-    gate.classList.add('hidden');
-  }
-
   function intentarIngresar() {
     const usuario = document.getElementById('loginUser').value.trim();
     const clave = document.getElementById('loginPass').value;
     if (usuario === CREDENCIALES.usuario && clave === CREDENCIALES.clave) {
-      localStorage.setItem('huellas_sesion', 'ok');
       gate.classList.add('hidden');
       errorEl.textContent = '';
     } else {

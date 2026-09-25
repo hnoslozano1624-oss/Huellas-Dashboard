@@ -90,11 +90,14 @@ async function handleApi(request, env, url) {
   }
   if (path === 'pedidos' && method === 'POST') {
     const b = await request.json();
+    const esContado = b.forma_pago === 'Efectivo' || b.forma_pago === 'Transferencia';
+    const estadoPago = esContado ? 'pagado' : 'pendiente';
+    const fecha = b.fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
     const r = await env.DB.prepare(
-      `INSERT INTO pedidos (cliente_id, vendedor_id, canal, forma_pago, observaciones, nombre_peludito, cumple_peludito)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO pedidos (fecha, cliente_id, vendedor_id, canal, forma_pago, estado_pago, observaciones, nombre_peludito, cumple_peludito)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      b.cliente_id, b.vendedor_id, b.canal, b.forma_pago,
+      fecha, b.cliente_id, b.vendedor_id, b.canal, b.forma_pago, estadoPago,
       b.observaciones ?? null, b.nombre_peludito ?? null, b.cumple_peludito ?? null
     ).run();
     const pedidoId = r.meta.last_row_id;
@@ -102,10 +105,11 @@ async function handleApi(request, env, url) {
       const prod = await env.DB.prepare('SELECT precio_unitario FROM productos WHERE id = ?')
         .bind(item.producto_id).first();
       if (!prod) continue;
-      const subtotal = prod.precio_unitario * item.cantidad;
+      const precioUsado = (item.precio_unitario != null) ? item.precio_unitario : prod.precio_unitario;
+      const subtotal = precioUsado * item.cantidad;
       await env.DB.prepare(
         'INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)'
-      ).bind(pedidoId, item.producto_id, item.cantidad, prod.precio_unitario, subtotal).run();
+      ).bind(pedidoId, item.producto_id, item.cantidad, precioUsado, subtotal).run();
     }
     return json({ id: pedidoId });
   }
