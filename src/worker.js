@@ -61,9 +61,24 @@ async function handleApi(request, env, url) {
   if (path === 'clientes' && method === 'POST') {
     const b = await request.json();
     const r = await env.DB.prepare(
-      'INSERT INTO clientes (nombre, celular, direccion) VALUES (?, ?, ?)'
-    ).bind(b.nombre, b.celular ?? null, b.direccion ?? null).run();
+      'INSERT INTO clientes (nombre, celular, direccion, canal) VALUES (?, ?, ?, ?)'
+    ).bind(b.nombre, b.celular ?? null, b.direccion ?? null, b.canal ?? null).run();
     return json({ id: r.meta.last_row_id });
+  }
+  const clienteIdMatch = path.match(/^clientes\/(\d+)$/);
+  if (clienteIdMatch && method === 'PATCH') {
+    const id = clienteIdMatch[1];
+    const b = await request.json();
+    const campos = [];
+    const valores = [];
+    if ('nombre' in b) { campos.push('nombre = ?'); valores.push(b.nombre); }
+    if ('celular' in b) { campos.push('celular = ?'); valores.push(b.celular || null); }
+    if ('direccion' in b) { campos.push('direccion = ?'); valores.push(b.direccion || null); }
+    if ('canal' in b) { campos.push('canal = ?'); valores.push(b.canal || null); }
+    if (campos.length === 0) return json({ error: 'Nada para actualizar' }, 400);
+    valores.push(id);
+    await env.DB.prepare(`UPDATE clientes SET ${campos.join(', ')} WHERE id = ?`).bind(...valores).run();
+    return json({ ok: true });
   }
 
   // --- Pedidos ---
