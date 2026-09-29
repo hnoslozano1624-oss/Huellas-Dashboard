@@ -138,10 +138,44 @@ async function handleApi(request, env, url) {
   const pedidoDeleteMatch = path.match(/^pedidos\/(\d+)$/);
   if (pedidoDeleteMatch && method === 'DELETE') {
     const id = pedidoDeleteMatch[1];
+    await env.DB.prepare('DELETE FROM flujo_caja WHERE pedido_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM abonos WHERE pedido_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM detalle_pedido WHERE pedido_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM pedidos WHERE id = ?').bind(id).run();
-    return json({ ok: true });
+    const seqRow = await env.DB.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'pedidos'").first();
+    if (seqRow && Number(seqRow.seq) === Number(id)) {
+      await env.DB.prepare("UPDATE sqlite_sequence SET seq = seq - 1 WHERE name = 'pedidos'").run();
+    }
+    return json({ ok: true, consecutivo_liberado: seqRow && Number(seqRow.seq) === Number(id) });
+  }
+  const pedidoManualMatch = path.match(/^pedidos\/manual$/);
+  if (pedidoManualMatch && method === 'POST') {
+    // Crea un pedido con un número específico (para rellenar un hueco en la numeración)
+    const b = await request.json();
+    const esContado = b.forma_pago === 'Efectivo' || b.forma_pago === 'Transferencia';
+    const estadoPago = esContado ? 'pagado' : 'pendiente';
+    const fecha = b.fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const existente = await env.DB.prepare('SELECT id FROM pedidos WHERE id = ?').bind(b.numero).first();
+    if (existente) return json({ error: 'Ya existe un pedido con ese número' }, 400);
+    await env.DB.prepare(
+      `INSERT INTO pedidos (id, fecha, cliente_id, vendedor_id, canal, forma_pago, estado_pago, observaciones, nombre_peludito, cumple_peludito)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      b.numero, fecha, b.cliente_id, b.vendedor_id, b.canal, b.forma_pago, estadoPago,
+      b.observaciones ?? null, b.nombre_peludito ?? null, b.cumple_peludito ?? null
+    ).run();
+    const pedidoId = b.numero;
+    for (const item of b.items || []) {
+      const prod = await env.DB.prepare('SELECT precio_unitario FROM productos WHERE id = ?')
+        .bind(item.producto_id).first();
+      if (!prod) continue;
+      const precioUsado = (item.precio_unitario != null) ? item.precio_unitario : prod.precio_unitario;
+      const subtotal = precioUsado * item.cantidad;
+      await env.DB.prepare(
+        'INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)'
+      ).bind(pedidoId, item.producto_id, item.cantidad, precioUsado, subtotal).run();
+    }
+    return json({ id: pedidoId });
   }
 
   // --- Órdenes de compra ---
@@ -209,8 +243,8 @@ async function handleApi(request, env, url) {
   if (path === 'flujo-caja' && method === 'POST') {
     const b = await request.json();
     const r = await env.DB.prepare(
-      'INSERT INTO flujo_caja (tipo, categoria, monto, descripcion, medio) VALUES (?, ?, ?, ?, ?)'
-    ).bind(b.tipo, b.categoria, b.monto, b.descripcion ?? null, b.medio ?? null).run();
+      'INSERT INTO flujo_caja (tipo, categoria, monto, descripcion, medio, pedido_id) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(b.tipo, b.categoria, b.monto, b.descripcion ?? null, b.medio ?? null, b.pedido_id ?? null).run();
     return json({ id: r.meta.last_row_id });
   }
 
