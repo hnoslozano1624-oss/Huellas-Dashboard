@@ -1345,28 +1345,45 @@ try {
 Chart.defaults.font.family = "'Plus Jakarta Sans', Arial, Helvetica, sans-serif";
 Chart.defaults.color = mutedColor;
 
-new Chart(document.getElementById('chartMensual'), {
-  type: 'line',
-  data: {
-    labels: DATA.meses,
-    datasets: [
-      { label: '2025', data: DATA.ventas_2025_mensual, borderColor: '#E8A898', backgroundColor: 'rgba(232,168,152,0.15)', tension: 0.3, fill: true, pointRadius: 3 },
-      { label: '2026', data: DATA.ventas_2026_mensual.map((v,i) => i < 7 ? v : null), borderColor: '#5C9E8A', backgroundColor: 'rgba(92,158,138,0.18)', tension: 0.3, fill: true, pointRadius: 3 }
-    ]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { position: 'top' } },
-    scales: {
-      y: { grid: { color: gridColor }, ticks: { callback: v => '$' + (v/1000000).toFixed(1) + 'M' } },
-      x: { grid: { display: false } }
-    }
+function construirDatosGraficas() {
+  const staticMensual2026 = DATA.ventas_2026_mensual.slice();
+  const mensual2026 = staticMensual2026.slice();
+  const canal = Object.assign({}, DATA.canal_2026);
+  const linea = Object.assign({}, DATA.linea_2026);
+  const vendedor = {};
+
+  const reales = PEDIDOS_HISTORIAL.filter(p => p.dbId);
+  const realesPorMes = {};
+  reales.forEach(p => {
+    if (p.fechaRaw.getFullYear() !== 2026) return;
+    const m = p.fechaRaw.getMonth();
+    realesPorMes[m] = (realesPorMes[m] || 0) + p.total;
+  });
+  for (let m = 0; m < 12; m++) {
+    if ((staticMensual2026[m] || 0) === 0 && realesPorMes[m]) mensual2026[m] = realesPorMes[m];
   }
-});
+
+  reales.forEach(p => {
+    if (p.fechaRaw.getFullYear() !== 2026) return;
+    const m = p.fechaRaw.getMonth();
+    if ((staticMensual2026[m] || 0) > 0) return; // ese mes ya viene contado en el histórico fijo
+    const canalNombre = (p.clienteCanal || 'SIN CANAL').toUpperCase();
+    canal[canalNombre] = (canal[canalNombre] || 0) + p.total;
+    vendedor[p.vendedor] = (vendedor[p.vendedor] || 0) + p.total;
+    (p.items || []).forEach(it => {
+      const lineaNombre = (it.linea || 'SIN LÍNEA').toUpperCase();
+      linea[lineaNombre] = (linea[lineaNombre] || 0) + it.valor;
+    });
+  });
+
+  return { mensual2026, canal, linea, vendedor: Object.keys(vendedor).length ? vendedor : DATA.ventas_por_vendedor };
+}
 
 const palette = ['#5C9E8A', '#E8A898', '#D98D7A', '#8FBFAF', '#C9B79C', '#7A8FA8', '#B5544A'];
 
 function donut(canvasId, dataObj) {
+  const existente = Chart.getChart(canvasId);
+  if (existente) existente.destroy();
   const labels = Object.keys(dataObj);
   const values = Object.values(dataObj);
   const total = values.reduce((a, b) => a + b, 0);
@@ -1405,19 +1422,45 @@ function donut(canvasId, dataObj) {
   });
 }
 
-donut('chartCanalDash', DATA.canal_2026);
-donut('chartLineaDash', DATA.linea_2026);
+function renderGraficasDashboard() {
+  const d = construirDatosGraficas();
 
-const vendLabels = Object.keys(DATA.ventas_por_vendedor);
-const vendValues = Object.values(DATA.ventas_por_vendedor);
-new Chart(document.getElementById('chartVendedor'), {
-  type: 'bar',
-  data: {
-    labels: vendLabels.map(v => v.length > 14 ? v.split(' ')[0] : v),
-    datasets: [{ data: vendValues, backgroundColor: palette, borderRadius: 6 }]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
+  const existenteMensual = Chart.getChart('chartMensual');
+  if (existenteMensual) existenteMensual.destroy();
+  new Chart(document.getElementById('chartMensual'), {
+    type: 'line',
+    data: {
+      labels: DATA.meses,
+      datasets: [
+        { label: '2025', data: DATA.ventas_2025_mensual, borderColor: '#E8A898', backgroundColor: 'rgba(232,168,152,0.15)', tension: 0.3, fill: true, pointRadius: 3 },
+        { label: '2026', data: d.mensual2026, borderColor: '#5C9E8A', backgroundColor: 'rgba(92,158,138,0.18)', tension: 0.3, fill: true, pointRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { grid: { color: gridColor }, ticks: { callback: v => '$' + (v/1000000).toFixed(1) + 'M' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  donut('chartCanalDash', d.canal);
+  donut('chartLineaDash', d.linea);
+
+  const existenteVend = Chart.getChart('chartVendedor');
+  if (existenteVend) existenteVend.destroy();
+  const vendLabels = Object.keys(d.vendedor);
+  const vendValues = Object.values(d.vendedor);
+  new Chart(document.getElementById('chartVendedor'), {
+    type: 'bar',
+    data: {
+      labels: vendLabels.map(v => v.length > 14 ? v.split(' ')[0] : v),
+      datasets: [{ data: vendValues, backgroundColor: palette, borderRadius: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
     scales: {
       y: { grid: { color: gridColor }, ticks: { callback: v => '$' + (v/1000000).toFixed(1) + 'M' } },
@@ -1425,7 +1468,9 @@ new Chart(document.getElementById('chartVendedor'), {
     }
   }
 });
+}
 
+renderGraficasDashboard();
 
 } catch (e) { console.error('Error dibujando gráficas:', e); }
 
@@ -1839,6 +1884,7 @@ async function cargarDatosReales() {
   try { sincronizarCarteraDesdeD1(); } catch (e) {}
   try { actualizarDashboardMes(); } catch (e) {}
   try { actualizarFiltrosAlMesConDatos(); } catch (e) {}
+  try { renderGraficasDashboard(); } catch (e) {}
 }
 cargarDatosReales();
 const CRM_CANALES = ['Conocido / Voz a voz', 'WhatsApp / Pauta', 'Redes sociales / Grupos', 'Volantes', 'Ferias o eventos'];
@@ -2923,6 +2969,7 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
               try { renderVentasPedidos(); } catch (e) {}
               try { sincronizarCarteraDesdeD1(); } catch (e) {}
               try { actualizarDashboardMes(); } catch (e) {}
+              try { renderGraficasDashboard(); } catch (e) {}
             }
           } catch (e) {}
         }
@@ -3137,6 +3184,7 @@ async function eliminarPedido(pedidoNum) {
       }
       try { await sincronizarCarteraDesdeD1(); } catch (e) {}
       try { actualizarDashboardMes(); } catch (e) {}
+      try { renderGraficasDashboard(); } catch (e) {}
     } else {
       alert('No se pudo eliminar el pedido en la base de datos real. Vuelve a intentarlo.');
     }
