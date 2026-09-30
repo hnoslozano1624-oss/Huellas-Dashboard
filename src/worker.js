@@ -182,7 +182,7 @@ async function handleApi(request, env, url) {
   if (path === 'ordenes-compra' && method === 'GET') {
     const { results } = await env.DB.prepare(
       `SELECT oc.id, oc.fecha, oc.proveedor, oc.producto_id, p.codigo, p.nombre AS producto,
-              oc.cantidad, oc.costo_unitario, oc.estado
+              oc.cantidad, oc.costo_unitario, oc.estado, oc.fecha_vencimiento
        FROM ordenes_compra oc JOIN productos p ON p.id = oc.producto_id
        ORDER BY oc.fecha DESC`
     ).all();
@@ -191,8 +191,8 @@ async function handleApi(request, env, url) {
   if (path === 'ordenes-compra' && method === 'POST') {
     const b = await request.json();
     const r = await env.DB.prepare(
-      'INSERT INTO ordenes_compra (proveedor, producto_id, cantidad, costo_unitario) VALUES (?, ?, ?, ?)'
-    ).bind(b.proveedor, b.producto_id, b.cantidad, b.costo_unitario).run();
+      'INSERT INTO ordenes_compra (proveedor, producto_id, cantidad, costo_unitario, fecha_vencimiento) VALUES (?, ?, ?, ?, ?)'
+    ).bind(b.proveedor, b.producto_id, b.cantidad, b.costo_unitario, b.fecha_vencimiento ?? null).run();
     return json({ id: r.meta.last_row_id });
   }
   const recibirMatch = path.match(/^ordenes-compra\/(\d+)\/recibir$/);
@@ -200,6 +200,17 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("UPDATE ordenes_compra SET estado = 'recibida' WHERE id = ?")
       .bind(recibirMatch[1]).run();
     return json({ ok: true });
+  }
+  if (path === 'vencidos' && method === 'GET') {
+    const { results } = await env.DB.prepare(
+      `SELECT oc.id, oc.fecha, p.codigo, p.nombre AS producto, p.categoria, oc.cantidad, oc.fecha_vencimiento,
+              CAST(julianday(oc.fecha_vencimiento) - julianday('now') AS INTEGER) AS dias_restantes
+       FROM ordenes_compra oc JOIN productos p ON p.id = oc.producto_id
+       WHERE oc.estado = 'recibida' AND oc.fecha_vencimiento IS NOT NULL
+         AND julianday(oc.fecha_vencimiento) - julianday('now') <= 90
+       ORDER BY oc.fecha_vencimiento ASC`
+    ).all();
+    return json(results);
   }
 
   // --- Cartera (saldo por pedido) y abonos ---
@@ -242,10 +253,27 @@ async function handleApi(request, env, url) {
   }
   if (path === 'flujo-caja' && method === 'POST') {
     const b = await request.json();
+    const campos = ['tipo', 'categoria', 'monto', 'descripcion', 'medio', 'pedido_id'];
+    const valores = [b.tipo, b.categoria, b.monto, b.descripcion ?? null, b.medio ?? null, b.pedido_id ?? null];
+    if (b.fecha) { campos.push('fecha'); valores.push(b.fecha); }
     const r = await env.DB.prepare(
-      'INSERT INTO flujo_caja (tipo, categoria, monto, descripcion, medio, pedido_id) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(b.tipo, b.categoria, b.monto, b.descripcion ?? null, b.medio ?? null, b.pedido_id ?? null).run();
+      `INSERT INTO flujo_caja (${campos.join(',')}) VALUES (${campos.map(() => '?').join(',')})`
+    ).bind(...valores).run();
     return json({ id: r.meta.last_row_id });
+  }
+
+  // --- Cierres de mes ---
+  if (path === 'cierres' && method === 'GET') {
+    const { results } = await env.DB.prepare('SELECT mes, fecha_cierre FROM cierres_mes ORDER BY mes DESC').all();
+    return json(results);
+  }
+  if (path === 'cierres' && method === 'POST') {
+    const b = await request.json();
+    if (!b.mes) return json({ error: 'Falta el mes (formato YYYY-MM)' }, 400);
+    const existente = await env.DB.prepare('SELECT mes FROM cierres_mes WHERE mes = ?').bind(b.mes).first();
+    if (existente) return json({ error: 'Ese mes ya está cerrado' }, 400);
+    await env.DB.prepare('INSERT INTO cierres_mes (mes) VALUES (?)').bind(b.mes).run();
+    return json({ ok: true });
   }
 
   // --- Usuarios / login ---
