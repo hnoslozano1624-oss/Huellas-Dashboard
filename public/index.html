@@ -560,18 +560,7 @@
         <div class="subpanel active" id="sub-ventas">
 
           <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Elija el rango de fechas y descargue el PDF de ventas.</li><li>Al terminar el mes puede usar «Cerrar este mes»: después no se podrán registrar pedidos en ese mes.</li></ul></details>
-          <section>
-            <div class="section-title"><span class="dot"></span>Hallazgos comerciales</div>
-            <div class="card">
-              <ul class="findings">
-                <li><b>Concentración de canal:</b> "Conocido / voz a voz" y "Ferias o eventos" siguen siendo ~85% de las ventas 2026; los canales digitales (WhatsApp/pauta, redes) apenas llegan al 8%.</li>
-                <li><b>Comida de perro domina:</b> 64% de las ventas 2026, seguida de comida de gato (23%). Es la línea a proteger y sobre la que vale la pena asegurar inventario.</li>
-                <li><b>Inconsistencias de captura:</b> categorías como "VOLANTE/VOLANTES", "ARENAS " (con espacio) o "COMIGA GATO" (typo) fragmentan los reportes automáticos del Drive — se corrigieron para este dashboard, pero conviene estandarizarlas en el formulario de pedidos.</li>
-              </ul>
-            </div>
-          </section>
-
-          <section>
+                    <section>
             <div class="section-title"><span class="dot"></span>Pedidos por mes — en vivo desde Solicitud de pedidos</div>
             <div class="card" style="margin-bottom:12px;">
               <div class="sub">Un producto por fila, para poder corroborar que cada pedido subido por los vendedores esté correcto: número, fecha, cliente, producto, línea, valor, canal y vendedor.</div>
@@ -2113,6 +2102,20 @@ let MESES_CERRADOS = [];
 
 function esCodigoReal(c) { return !!c && !/^ID\d+$/.test(c); }
 
+function mapPedidoDb(p) {
+  const fechaRaw = new Date((p.fecha || '').replace(' ', 'T') + 'Z');
+  return {
+    pedidoNum: String(p.id), fechaRaw: fechaRaw,
+    fecha: fechaRaw.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
+    vendedor: p.vendedor, clienteNombre: p.cliente, clienteCanal: p.canal,
+    items: (p.items || []).map(it => ({
+      cod: it.codigo || ('ID' + it.producto_id), producto: it.producto, linea: it.categoria,
+      cantidad: it.cantidad, precioUnit: it.precio_unitario != null ? it.precio_unitario : (it.cantidad ? it.valor / it.cantidad : 0), valor: it.valor
+    })),
+    formaPago: p.forma_pago, observaciones: p.observaciones || '', total: p.total, estadoPago: p.estado_pago, dbId: p.id
+  };
+}
+
 async function cargarDatosReales() {
   try {
     const r = await fetch('/api/productos');
@@ -2174,16 +2177,7 @@ async function cargarDatosReales() {
     if (r5.ok) {
       const pedidosDb = await r5.json();
       PEDIDOS_HISTORIAL.length = 0;
-      pedidosDb.forEach(p => {
-        const fechaRaw = new Date((p.fecha || '').replace(' ', 'T') + 'Z');
-        PEDIDOS_HISTORIAL.push({
-          pedidoNum: String(p.id), fechaRaw: fechaRaw,
-          fecha: fechaRaw.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
-          vendedor: p.vendedor, clienteNombre: p.cliente, clienteCanal: p.canal,
-          items: (p.items || []).map(it => ({ producto: it.producto, linea: it.categoria, cantidad: it.cantidad, valor: it.valor })),
-          formaPago: p.forma_pago, observaciones: '', total: p.total, estadoPago: p.estado_pago, dbId: p.id
-        });
-      });
+      pedidosDb.forEach(p => PEDIDOS_HISTORIAL.push(mapPedidoDb(p)));
     }
   } catch (e) { console.error('No se pudo cargar el historial real de pedidos:', e); }
 
@@ -3153,6 +3147,7 @@ function cargarPedidoParaEditar(pedidoNum) {
   document.querySelectorAll('input[name="pedFormaPago"]').forEach(r => { r.checked = (r.value === p.formaPago); });
   document.getElementById('pedObservaciones').value = p.observaciones || '';
 
+  try { if (p.fechaRaw) document.getElementById('pedFecha').value = p.fechaRaw.getFullYear() + '-' + String(p.fechaRaw.getMonth() + 1).padStart(2, '0') + '-' + String(p.fechaRaw.getDate()).padStart(2, '0'); } catch (e) {}
   PED_EDITING_NUM = p.pedidoNum;
   PED_EDITING_ORIGINAL = {
     items: p.items.map(it => ({...it})),
@@ -3162,7 +3157,7 @@ function cargarPedidoParaEditar(pedidoNum) {
   };
 
   document.getElementById('pedEditBanner').style.display = 'flex';
-  document.getElementById('pedEditBannerText').textContent = 'Editando la solicitud ' + p.pedidoNum;
+  document.getElementById('pedEditBannerText').textContent = 'Editando el pedido ' + p.pedidoNum + ' — los datos ya vienen cargados tal como se subieron; cambie solo lo necesario y presione Enviar.';
   document.getElementById('pedNueva').style.display = '';
 
   renderPedido();
@@ -3241,7 +3236,72 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   const fechaSeleccionada = new Date(fechaInput + 'T12:00:00');
   const fecha = fechaSeleccionada.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  // Si estamos editando, primero revertimos el efecto original en inventario, cartera y caja
+  const itemsConLinea = PED_ITEMS.map(it => {
+    const prodInfo = LISTA_PRECIOS.find(p => p.cod === it.cod);
+    return {
+      ...it,
+      linea: prodInfo ? prodInfo.categoria : (it.linea || 'SIN LÍNEA'),
+      valor: it.cantidad * it.precioUnit
+    };
+  });
+
+  // --- 1) Guardado en la base de datos: si falla, no se toca nada y el formulario queda como estaba ---
+  const existenteDb = PED_EDITING_NUM ? PEDIDOS_HISTORIAL.find(p => p.pedidoNum === PED_EDITING_NUM && p.dbId) : null;
+  const eraEdicion = !!PED_EDITING_NUM;
+  const falla = (msg) => {
+    statusEl.style.fontWeight = 'bold';
+    statusEl.style.color = 'var(--danger, #B24A3B)';
+    statusEl.textContent = '⚠ No se guardó el pedido: ' + msg + ' Sus datos siguen en pantalla para que pueda intentarlo de nuevo.';
+  };
+  const vendedorId = DB_USUARIO_ID[vendedor];
+  const clienteId = DB_CLIENTE_ID[clienteNombre];
+  if (!vendedorId) { falla('el vendedor «' + vendedor + '» no está registrado en la base de datos.'); return; }
+  if (!clienteId) { falla('el cliente «' + clienteNombre + '» no está registrado en la base de datos (recargue la página y vuelva a elegirlo).'); return; }
+  const sinCodigo = itemsConLinea.filter(it => !DB_PRODUCTO_ID[it.cod]);
+  if (sinCodigo.length) { falla('estos productos no se encontraron en el catálogo: ' + sinCodigo.map(it => it.producto).join(', ') + '.'); return; }
+  const itemsReales = itemsConLinea.map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad, precio_unitario: it.precioUnit }));
+  const fechaParaDB = fechaSeleccionada.getFullYear() + '-' +
+    String(fechaSeleccionada.getMonth() + 1).padStart(2, '0') + '-' +
+    String(fechaSeleccionada.getDate()).padStart(2, '0') + ' 12:00:00';
+  const numeroManual = document.getElementById('pedNumeroManual').value.trim();
+  const cuerpoPedido = {
+    cliente_id: clienteId, vendedor_id: vendedorId, canal: clienteCanal || 'CONOCIDO / VOZ A VOZ',
+    forma_pago: formaPago, observaciones: observaciones, items: itemsReales, fecha: fechaParaDB
+  };
+  let pedidoCreadoNumero = null;
+  try {
+    let rp;
+    if (existenteDb) {
+      rp = await fetch('/api/pedidos/' + existenteDb.dbId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpoPedido) });
+    } else if (numeroManual) {
+      rp = await fetch('/api/pedidos/manual', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...cuerpoPedido, numero: parseInt(numeroManual) }) });
+    } else {
+      rp = await fetch('/api/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpoPedido) });
+    }
+    if (!rp.ok) {
+      let detalle = ''; try { const er = await rp.json(); detalle = er.error ? ' (' + er.error + ')' : ''; } catch (e) {}
+      falla('el servidor respondió con error ' + rp.status + detalle + '.'); return;
+    }
+    const creado = await rp.json();
+    pedidoCreadoNumero = creado.id;
+  } catch (e) {
+    console.error('No se pudo guardar el pedido en la base de datos real:', e);
+    falla('no hay conexión con el servidor. Revise su internet.'); return;
+  }
+
+  if (formaPago === 'Efectivo' || formaPago === 'Transferencia') {
+    const cuentaVenta2 = formaPago === 'Efectivo' ? 'Efectivo' : 'Bancos';
+    fetch('/api/flujo-caja', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'ingreso', categoria: cuentaVenta2, monto: total,
+        descripcion: 'Venta — ' + clienteNombre + ' (' + pedidoCreadoNumero + ')',
+        medio: cuentaVenta2, pedido_id: pedidoCreadoNumero
+      })
+    }).catch(err => console.error('No se pudo vincular el ingreso de caja al pedido real:', err));
+  }
+
+  // --- 2) Efectos locales (inventario, cartera y caja) ---
   if (PED_EDITING_NUM && PED_EDITING_ORIGINAL) {
     PED_EDITING_ORIGINAL.items.forEach(it => {
       if (it.cod) INVENTARIO_STOCK[it.cod] = (INVENTARIO_STOCK[it.cod] || 0) + it.cantidad;
@@ -3251,37 +3311,21 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
     if (PED_EDITING_ORIGINAL.formaPago === 'Efectivo') CAJA_EFECTIVO -= PED_EDITING_ORIGINAL.total;
     else if (PED_EDITING_ORIGINAL.formaPago === 'Transferencia') CAJA_BANCOS -= PED_EDITING_ORIGINAL.total;
   }
-
-  const pedidoNum = PED_EDITING_NUM || String(PED_COUNTER);
-  const itemsConLinea = PED_ITEMS.map(it => {
-    const prodInfo = LISTA_PRECIOS.find(p => p.cod === it.cod);
-    return {
-      ...it,
-      linea: prodInfo ? prodInfo.categoria : 'SIN LÍNEA',
-      valor: it.cantidad * it.precioUnit
-    };
-  });
-
-  // Aplicamos la salida de inventario con las cantidades actuales
+  const pedidoNum = PED_EDITING_NUM || String(pedidoCreadoNumero);
   itemsConLinea.forEach(it => {
     if (it.cod) INVENTARIO_STOCK[it.cod] = (INVENTARIO_STOCK[it.cod] || 0) - it.cantidad;
   });
-
   const existingIdx = PEDIDOS_HISTORIAL.findIndex(p => p.pedidoNum === pedidoNum);
   const fechaRawOriginal = existingIdx >= 0 ? PEDIDOS_HISTORIAL[existingIdx].fechaRaw : fechaSeleccionada;
-
   const pedido = {
     pedidoNum: pedidoNum, fechaRaw: fechaRawOriginal,
     vendedor: vendedor, clienteNombre: clienteNombre, clienteCanal: clienteCanal,
-    items: itemsConLinea,
-    formaPago: formaPago, observaciones: observaciones, total: total, fecha: fecha
+    items: itemsConLinea, formaPago: formaPago, observaciones: observaciones, total: total, fecha: fecha, dbId: pedidoCreadoNumero
   };
   if (existingIdx >= 0) { PEDIDOS_HISTORIAL[existingIdx] = pedido; }
-  else { PEDIDOS_HISTORIAL.push(pedido); PED_COUNTER++; }
-
+  else { PEDIDOS_HISTORIAL.push(pedido); }
   try { renderVentasPedidos(); } catch (e) {}
   try { renderInventarioBase(); } catch (e) {}
-
   if (formaPago === 'Crédito 8 días' || formaPago === 'Crédito 15 días') {
     CARTERA.push({
       pedidoNum: pedidoNum, cliente: clienteNombre, vendedor: vendedor, total: total,
@@ -3293,85 +3337,28 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   }
   try { renderCartera(); } catch (e) {}
 
-  // --- Guardado real en la base de datos (además de la simulación local de arriba) ---
-  let guardadoReal = false;
-  let pedidoCreadoNumero = null;
+  // --- 3) Se recarga desde la base de datos para que todo quede igual a lo guardado ---
   try {
-    const vendedorId = DB_USUARIO_ID[vendedor];
-    const clienteId = DB_CLIENTE_ID[clienteNombre];
-    if (vendedorId && clienteId) {
-      const itemsReales = itemsConLinea
-        .filter(it => DB_PRODUCTO_ID[it.cod])
-        .map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad, precio_unitario: it.cantidad ? it.valor / it.cantidad : 0 }));
-      if (itemsReales.length > 0) {
-        const fechaParaDB = fechaSeleccionada.getFullYear() + '-' +
-          String(fechaSeleccionada.getMonth() + 1).padStart(2, '0') + '-' +
-          String(fechaSeleccionada.getDate()).padStart(2, '0') + ' 12:00:00';
-        const numeroManual = document.getElementById('pedNumeroManual').value.trim();
-        const cuerpoPedido = {
-          cliente_id: clienteId, vendedor_id: vendedorId, canal: clienteCanal || 'CONOCIDO / VOZ A VOZ',
-          forma_pago: formaPago, observaciones: observaciones, items: itemsReales, fecha: fechaParaDB
-        };
-        let rp;
-        if (numeroManual) {
-          rp = await fetch('/api/pedidos/manual', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...cuerpoPedido, numero: parseInt(numeroManual) })
-          });
-        } else {
-          rp = await fetch('/api/pedidos', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cuerpoPedido)
-          });
-        }
-        if (rp.ok) {
-          guardadoReal = true;
-          const pedidoCreado = await rp.json();
-          pedidoCreadoNumero = pedidoCreado.id;
-          if (formaPago === 'Efectivo' || formaPago === 'Transferencia') {
-            const cuentaVenta2 = formaPago === 'Efectivo' ? 'Efectivo' : 'Bancos';
-            fetch('/api/flujo-caja', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tipo: 'ingreso', categoria: cuentaVenta2, monto: total,
-                descripcion: 'Venta — ' + clienteNombre + ' (' + pedidoCreado.id + ')',
-                medio: cuentaVenta2, pedido_id: pedidoCreado.id
-              })
-            }).catch(err => console.error('No se pudo vincular el ingreso de caja al pedido real:', err));
-          }
-          try {
-            const ri = await fetch('/api/inventario');
-            if (ri.ok) {
-              const inv = await ri.json();
-              inv.forEach(i => { INVENTARIO_STOCK[i.codigo || ('ID' + i.producto_id)] = i.cantidad_disponible; });
-              try { renderInventarioBase(); } catch (e) {}
-            }
-          } catch (e) {}
-          try {
-            const rpe = await fetch('/api/pedidos');
-            if (rpe.ok) {
-              const pedidosDb = await rpe.json();
-              PEDIDOS_HISTORIAL.length = 0;
-              pedidosDb.forEach(p => {
-                const fechaRawDb = new Date((p.fecha || '').replace(' ', 'T') + 'Z');
-                PEDIDOS_HISTORIAL.push({
-                  pedidoNum: String(p.id), fechaRaw: fechaRawDb,
-                  fecha: fechaRawDb.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
-                  vendedor: p.vendedor, clienteNombre: p.cliente, clienteCanal: p.canal,
-                  items: (p.items || []).map(it => ({ producto: it.producto, linea: it.categoria, cantidad: it.cantidad, valor: it.valor })),
-                  formaPago: p.forma_pago, observaciones: '', total: p.total, estadoPago: p.estado_pago, dbId: p.id
-                });
-              });
-              try { renderVentasPedidos(); } catch (e) {}
-              try { sincronizarCarteraDesdeD1(); } catch (e) {}
-              try { actualizarDashboardMes(); } catch (e) {}
-              try { renderGraficasDashboard(); } catch (e) {}
-            }
-          } catch (e) {}
-        }
-      }
+    const ri = await fetch('/api/inventario');
+    if (ri.ok) {
+      const inv = await ri.json();
+      inv.forEach(i => { INVENTARIO_STOCK[i.codigo || ('ID' + i.producto_id)] = i.cantidad_disponible; });
+      try { renderInventarioBase(); } catch (e) {}
     }
-  } catch (e) { console.error('No se pudo guardar el pedido en la base de datos real:', e); }
+  } catch (e) {}
+  try {
+    const rpe = await fetch('/api/pedidos');
+    if (rpe.ok) {
+      const pedidosDb = await rpe.json();
+      PEDIDOS_HISTORIAL.length = 0;
+      pedidosDb.forEach(p => PEDIDOS_HISTORIAL.push(mapPedidoDb(p)));
+      try { renderVentasPedidos(); } catch (e) {}
+      try { sincronizarCarteraDesdeD1(); } catch (e) {}
+      try { actualizarDashboardMes(); } catch (e) {}
+      try { renderGraficasDashboard(); } catch (e) {}
+    }
+  } catch (e) {}
+  const guardadoReal = true;
 
   PED_EDITING_NUM = null;
   PED_EDITING_ORIGINAL = null;
@@ -3393,7 +3380,7 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   statusEl.style.fontWeight = 'bold';
   if (guardadoReal) {
     statusEl.style.color = 'var(--jade-dark, #3F7364)';
-    statusEl.textContent = '✓ Pedido ' + (existingIdx >= 0 ? pedidoNum + ' corregido' : (pedidoCreadoNumero || pedidoNum) + ' guardado') + ' (' + fmtCOPc(total) + ') — quedó permanente en la base de datos.';
+    statusEl.textContent = '✓ Pedido ' + (eraEdicion ? pedidoNum + ' corregido' : (pedidoCreadoNumero || pedidoNum) + ' guardado') + ' (' + fmtCOPc(total) + ') — quedó permanente en la base de datos.';
   } else {
     statusEl.style.color = 'var(--danger, #B24A3B)';
     statusEl.textContent = '⚠ El pedido se calculó localmente pero NO se pudo confirmar el guardado permanente en la base de datos. Revisa tu conexión e inténtalo de nuevo.';

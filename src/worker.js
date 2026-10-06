@@ -85,20 +85,20 @@ async function handleApi(request, env, url) {
   if (path === 'pedidos' && method === 'GET') {
     const { results } = await env.DB.prepare(
       `SELECT pe.id, pe.fecha, c.nombre AS cliente, u.nombre AS vendedor, pe.canal,
-              pe.forma_pago, pe.estado_pago, pe.total
+              pe.forma_pago, pe.estado_pago, pe.total, pe.observaciones, pe.cliente_id, pe.vendedor_id
        FROM pedidos pe
        JOIN clientes c ON c.id = pe.cliente_id
        JOIN usuarios u ON u.id = pe.vendedor_id
        ORDER BY pe.fecha DESC`
     ).all();
     const { results: detalles } = await env.DB.prepare(
-      `SELECT dp.pedido_id, dp.cantidad, dp.subtotal, p.nombre AS producto, p.categoria
+      `SELECT dp.pedido_id, dp.producto_id, dp.cantidad, dp.precio_unitario, dp.subtotal, p.codigo, p.nombre AS producto, p.categoria
        FROM detalle_pedido dp JOIN productos p ON p.id = dp.producto_id`
     ).all();
     const porPedido = {};
     detalles.forEach(d => {
       if (!porPedido[d.pedido_id]) porPedido[d.pedido_id] = [];
-      porPedido[d.pedido_id].push({ producto: d.producto, categoria: d.categoria, cantidad: d.cantidad, valor: d.subtotal });
+      porPedido[d.pedido_id].push({ producto_id: d.producto_id, codigo: d.codigo, producto: d.producto, categoria: d.categoria, cantidad: d.cantidad, precio_unitario: d.precio_unitario, valor: d.subtotal });
     });
     results.forEach(p => { p.items = porPedido[p.id] || []; });
     return json(results);
@@ -108,14 +108,32 @@ async function handleApi(request, env, url) {
     const esContado = b.forma_pago === 'Efectivo' || b.forma_pago === 'Transferencia';
     const estadoPago = esContado ? 'pagado' : 'pendiente';
     const fecha = b.fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
-    const r = await env.DB.prepare(
-      `INSERT INTO pedidos (fecha, cliente_id, vendedor_id, canal, forma_pago, estado_pago, observaciones, nombre_peludito, cumple_peludito)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      fecha, b.cliente_id, b.vendedor_id, b.canal, b.forma_pago, estadoPago,
-      b.observaciones ?? null, b.nombre_peludito ?? null, b.cumple_peludito ?? null
-    ).run();
-    const pedidoId = r.meta.last_row_id;
+    // Si hay un consecutivo liberado por un pedido eliminado, se reutiliza para no perder la secuencia
+    await asegurarTablaConsecutivos(env);
+    const libre = await env.DB.prepare(
+      'SELECT numero FROM consecutivos_libres WHERE numero NOT IN (SELECT id FROM pedidos) ORDER BY numero ASC LIMIT 1'
+    ).first();
+    let pedidoId;
+    if (libre) {
+      await env.DB.prepare(
+        `INSERT INTO pedidos (id, fecha, cliente_id, vendedor_id, canal, forma_pago, estado_pago, observaciones, nombre_peludito, cumple_peludito)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        libre.numero, fecha, b.cliente_id, b.vendedor_id, b.canal, b.forma_pago, estadoPago,
+        b.observaciones ?? null, b.nombre_peludito ?? null, b.cumple_peludito ?? null
+      ).run();
+      pedidoId = libre.numero;
+    } else {
+      const r = await env.DB.prepare(
+        `INSERT INTO pedidos (fecha, cliente_id, vendedor_id, canal, forma_pago, estado_pago, observaciones, nombre_peludito, cumple_peludito)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        fecha, b.cliente_id, b.vendedor_id, b.canal, b.forma_pago, estadoPago,
+        b.observaciones ?? null, b.nombre_peludito ?? null, b.cumple_peludito ?? null
+      ).run();
+      pedidoId = r.meta.last_row_id;
+    }
+    await env.DB.prepare('DELETE FROM consecutivos_libres WHERE numero = ?').bind(pedidoId).run();
     for (const item of b.items || []) {
       const prod = await env.DB.prepare('SELECT precio_unitario FROM productos WHERE id = ?')
         .bind(item.producto_id).first();
@@ -135,6 +153,32 @@ async function handleApi(request, env, url) {
       .bind(b.estado_pago, estadoPagoMatch[1]).run();
     return json({ ok: true });
   }
+  const pedidoPutMatch = path.match(/^pedidos\/(\d+)$/);
+  if (pedidoPutMatch && method === 'PUT') {
+    // Edita un pedido existente conservando su número: actualiza encabezado y reemplaza el detalle
+    const id = Number(pedidoPutMatch[1]);
+    const b = await request.json();
+    const previo = await env.DB.prepare('SELECT forma_pago, estado_pago, fecha FROM pedidos WHERE id = ?').bind(id).first();
+    if (!previo) return json({ error: 'El pedido no existe' }, 404);
+    const esContado = b.forma_pago === 'Efectivo' || b.forma_pago === 'Transferencia';
+    const eraContado = previo.forma_pago === 'Efectivo' || previo.forma_pago === 'Transferencia';
+    const estadoPago = esContado ? 'pagado' : (eraContado ? 'pendiente' : previo.estado_pago);
+    await env.DB.prepare(
+      `UPDATE pedidos SET fecha = ?, cliente_id = ?, vendedor_id = ?, canal = ?, forma_pago = ?, estado_pago = ?, observaciones = ? WHERE id = ?`
+    ).bind(b.fecha || previo.fecha, b.cliente_id, b.vendedor_id, b.canal, b.forma_pago, estadoPago, b.observaciones ?? null, id).run();
+    await env.DB.prepare('DELETE FROM detalle_pedido WHERE pedido_id = ?').bind(id).run();
+    for (const item of b.items || []) {
+      const prod = await env.DB.prepare('SELECT precio_unitario FROM productos WHERE id = ?').bind(item.producto_id).first();
+      if (!prod) continue;
+      const precioUsado = (item.precio_unitario != null) ? item.precio_unitario : prod.precio_unitario;
+      await env.DB.prepare(
+        'INSERT INTO detalle_pedido (pedido_id, producto_id, cantidad, precio_unitario, subtotal) VALUES (?, ?, ?, ?, ?)'
+      ).bind(id, item.producto_id, item.cantidad, precioUsado, precioUsado * item.cantidad).run();
+    }
+    // El ingreso de caja ligado al pedido se rehace con el nuevo total
+    await env.DB.prepare('DELETE FROM flujo_caja WHERE pedido_id = ?').bind(id).run();
+    return json({ id, editado: true });
+  }
   const pedidoDeleteMatch = path.match(/^pedidos\/(\d+)$/);
   if (pedidoDeleteMatch && method === 'DELETE') {
     const id = pedidoDeleteMatch[1];
@@ -142,6 +186,8 @@ async function handleApi(request, env, url) {
     await env.DB.prepare('DELETE FROM abonos WHERE pedido_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM detalle_pedido WHERE pedido_id = ?').bind(id).run();
     await env.DB.prepare('DELETE FROM pedidos WHERE id = ?').bind(id).run();
+    await asegurarTablaConsecutivos(env);
+    await env.DB.prepare('INSERT OR IGNORE INTO consecutivos_libres (numero) VALUES (?)').bind(Number(id)).run();
     const seqRow = await env.DB.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'pedidos'").first();
     if (seqRow && Number(seqRow.seq) === Number(id)) {
       await env.DB.prepare("UPDATE sqlite_sequence SET seq = seq - 1 WHERE name = 'pedidos'").run();
@@ -315,4 +361,10 @@ function json(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+
+// Consecutivos de pedidos eliminados: el siguiente pedido nuevo reutiliza el más bajo disponible
+async function asegurarTablaConsecutivos(env) {
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS consecutivos_libres (numero INTEGER PRIMARY KEY)').run();
 }
