@@ -326,6 +326,11 @@
   .ped-item .pi-qty input { text-align: center !important; min-width: 0; }
   .ped-item .pi-sub { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--card-border); font-size: 0.85rem; color: var(--muted); }
   .ped-item .pi-sub b { font-size: 1.05rem; color: var(--ink); }
+  .ped-letras { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .ped-letras button { all: unset; cursor: pointer; box-sizing: border-box; min-width: 34px; height: 34px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--card-border); border-radius: 8px; font-weight: 700; font-size: 0.85rem; color: var(--jade-dark); background: var(--bg); }
+  .ped-letras button:hover { border-color: var(--jade); }
+  .ped-letras button.activa { background: var(--jade); border-color: var(--jade); color: #fff; }
+  .ped-letras .ped-letras-todos { padding: 0 12px; }
   .ped-cliente-row { display: flex; gap: 10px; align-items: stretch; }
   .ped-cliente-row select { flex: 1; min-width: 0; }
   .ped-cliente-row .ped-nuevo-btn { flex-shrink: 0; width: auto; margin: 0; padding: 8px 14px; white-space: nowrap; }
@@ -1297,7 +1302,8 @@
           <h3>2. Cliente</h3>
           <div class="lp-form-grid" style="grid-template-columns:1fr;">
             <div>
-              <label>Cliente</label>
+              <label>Cliente — elija la letra inicial</label>
+              <div id="pedLetras" class="ped-letras"></div>
               <div class="ped-cliente-row">
                 <select id="pedClienteSelect">
                   <option value="">Selecciona...</option>
@@ -3403,14 +3409,45 @@ document.getElementById('carteraDescargarPDF').addEventListener('click', async (
 });
 
 
+let PED_LETRA = '';
+function pedLetraDe(nombre) {
+  const c = String(nombre || '').trim().charAt(0).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return /[A-Z]/.test(c) ? c : '#';
+}
+function pedResetClienteSel() {
+  PED_LETRA = '';
+  document.getElementById('pedClienteSelect').value = '';
+  refreshPedClienteSelect();
+}
 function refreshPedClienteSelect() {
   const sel = document.getElementById('pedClienteSelect');
   const current = sel.value;
-  sel.innerHTML = '<option value="">Selecciona...</option>';
   const ordenados = CRM_CLIENTES
     .map((c, idx) => ({ c, idx }))
     .sort((a, b) => a.c.nombre.localeCompare(b.c.nombre, 'es', { sensitivity: 'base' }));
-  ordenados.forEach(({ c, idx }) => {
+  // Letras disponibles
+  const cuenta = {};
+  ordenados.forEach(({ c }) => { const l = pedLetraDe(c.nombre); cuenta[l] = (cuenta[l] || 0) + 1; });
+  const letras = Object.keys(cuenta).sort((a, b) => (a === '#') - (b === '#') || a.localeCompare(b));
+  const cont = document.getElementById('pedLetras');
+  cont.innerHTML = '';
+  const mk = (clave, texto, titulo) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = texto; b.title = titulo;
+    if (PED_LETRA === clave) b.classList.add('activa');
+    if (clave === '*') b.classList.add('ped-letras-todos');
+    b.addEventListener('click', () => {
+      PED_LETRA = (PED_LETRA === clave) ? '' : clave;
+      sel.value = '';
+      refreshPedClienteSelect();
+    });
+    cont.appendChild(b);
+  };
+  letras.forEach(l => mk(l, l, cuenta[l] + ' cliente(s)'));
+  mk('*', 'Todos', 'Ver todos los clientes');
+  // Opciones según la letra elegida
+  const visibles = PED_LETRA === '*' ? ordenados : ordenados.filter(({ c }) => pedLetraDe(c.nombre) === PED_LETRA);
+  sel.innerHTML = '<option value="">' + (PED_LETRA ? 'Selecciona (' + visibles.length + ')...' : 'Primero elija una letra...') + '</option>';
+  visibles.forEach(({ c, idx }) => {
     const opt = document.createElement('option');
     opt.value = 'idx:' + idx;
     opt.textContent = c.nombre;
@@ -3532,6 +3569,8 @@ function cargarPedidoParaEditar(pedidoNum) {
   document.getElementById('pedVendedor').value = p.vendedor;
 
   const clienteIdx = CRM_CLIENTES.findIndex(c => c.nombre === p.clienteNombre);
+  PED_LETRA = clienteIdx >= 0 ? pedLetraDe(p.clienteNombre) : '';
+  refreshPedClienteSelect();
   document.getElementById('pedClienteSelect').value = clienteIdx >= 0 ? 'idx:' + clienteIdx : '';
   setPedNuevoCliente(false);
 
@@ -3565,7 +3604,7 @@ document.getElementById('pedNueva').addEventListener('click', () => {
   PED_EDITING_NUM = null;
   PED_EDITING_ORIGINAL = null;
   document.getElementById('pedVendedor').value = (function(){ try { return localStorage.getItem('huellas_vendedor') || ''; } catch (e) { return ''; } })();
-  document.getElementById('pedClienteSelect').value = '';
+  pedResetClienteSel();
   setPedNuevoCliente(false);
   ['pedClienteNombre','pedClienteCelular','pedClienteDireccion'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pedCategoria').value = '';
@@ -3768,7 +3807,7 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   PED_EDITING_ORIGINAL = null;
   PED_ITEMS = [];
   document.getElementById('pedVendedor').value = (function(){ try { return localStorage.getItem('huellas_vendedor') || ''; } catch (e) { return ''; } })();
-  document.getElementById('pedClienteSelect').value = '';
+  pedResetClienteSel();
   setPedNuevoCliente(false);
   ['pedClienteNombre','pedClienteCelular','pedClienteDireccion'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pedCategoria').value = '';
