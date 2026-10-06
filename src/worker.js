@@ -23,10 +23,24 @@ async function handleApi(request, env, url) {
   }
   if (path === 'productos' && method === 'POST') {
     const b = await request.json();
-    await env.DB.prepare(
+    // Código automático: sigue el consecutivo HO (el mayor existente + 1)
+    let codigo = (b.codigo || '').trim().toUpperCase();
+    if (!codigo) {
+      const { results: cods } = await env.DB.prepare("SELECT codigo FROM productos WHERE codigo LIKE 'HO%'").all();
+      let max = 0;
+      cods.forEach(c => { const n = parseInt(String(c.codigo).replace(/^HO/i, ''), 10); if (!isNaN(n) && n > max) max = n; });
+      codigo = 'HO' + String(max + 1).padStart(3, '0');
+    }
+    const r = await env.DB.prepare(
       'INSERT INTO productos (codigo, nombre, categoria, precio_unitario, costo_unitario) VALUES (?, ?, ?, ?, ?)'
-    ).bind(b.codigo, b.nombre, b.categoria, b.precio_unitario, b.costo_unitario ?? null).run();
-    return json({ codigo: b.codigo });
+    ).bind(codigo, b.nombre, b.categoria, b.precio_unitario ?? 0, b.costo_unitario ?? null).run();
+    const productoId = r.meta.last_row_id;
+    const cant = Number(b.cantidad_inicial) || 0;
+    if (cant > 0) {
+      await env.DB.prepare("UPDATE inventario SET cantidad_disponible = cantidad_disponible + ?, actualizado_en = datetime('now') WHERE producto_id = ?").bind(cant, productoId).run();
+      await registrarEntrada(env, productoId, cant, b.nota || 'Producto nuevo');
+    }
+    return json({ id: productoId, codigo });
   }
   const productoIdMatch = path.match(/^productos\/(\d+)$/);
   if (productoIdMatch && method === 'PATCH') {
@@ -51,6 +65,18 @@ async function handleApi(request, env, url) {
        ORDER BY p.categoria, p.nombre`
     ).all();
     return json(results);
+  }
+
+  if (path === 'inventario/entrada' && method === 'POST') {
+    const b = await request.json();
+    const cant = Number(b.cantidad);
+    if (!b.producto_id || !cant || cant <= 0) return json({ error: 'Producto y cantidad (mayor a 0) son obligatorios' }, 400);
+    const prod = await env.DB.prepare('SELECT id FROM productos WHERE id = ?').bind(b.producto_id).first();
+    if (!prod) return json({ error: 'El producto no existe' }, 404);
+    await env.DB.prepare("UPDATE inventario SET cantidad_disponible = cantidad_disponible + ?, actualizado_en = datetime('now') WHERE producto_id = ?").bind(cant, b.producto_id).run();
+    await registrarEntrada(env, b.producto_id, cant, b.nota || 'Entrada manual');
+    const fila = await env.DB.prepare('SELECT cantidad_disponible FROM inventario WHERE producto_id = ?').bind(b.producto_id).first();
+    return json({ ok: true, cantidad_disponible: fila ? fila.cantidad_disponible : null });
   }
 
   // --- Clientes ---
@@ -78,6 +104,15 @@ async function handleApi(request, env, url) {
     if (campos.length === 0) return json({ error: 'Nada para actualizar' }, 400);
     valores.push(id);
     await env.DB.prepare(`UPDATE clientes SET ${campos.join(', ')} WHERE id = ?`).bind(...valores).run();
+    return json({ ok: true });
+  }
+
+  const clienteDelMatch = path.match(/^clientes\/(\d+)$/);
+  if (clienteDelMatch && method === 'DELETE') {
+    const id = clienteDelMatch[1];
+    const uso = await env.DB.prepare('SELECT COUNT(*) AS n FROM pedidos WHERE cliente_id = ?').bind(id).first();
+    if (uso && uso.n > 0) return json({ error: 'El cliente tiene ' + uso.n + ' pedido(s) registrados y no se puede borrar' }, 409);
+    await env.DB.prepare('DELETE FROM clientes WHERE id = ?').bind(id).run();
     return json({ ok: true });
   }
 
@@ -367,4 +402,10 @@ function json(data, status = 200) {
 // Consecutivos de pedidos eliminados: el siguiente pedido nuevo reutiliza el más bajo disponible
 async function asegurarTablaConsecutivos(env) {
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS consecutivos_libres (numero INTEGER PRIMARY KEY)').run();
+}
+
+// Historial de entradas de inventario (se crea sola la primera vez que se usa)
+async function registrarEntrada(env, productoId, cantidad, nota) {
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS entradas_inventario (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL DEFAULT (datetime(\'now\')), producto_id INTEGER NOT NULL, cantidad INTEGER NOT NULL, nota TEXT)').run();
+  await env.DB.prepare('INSERT INTO entradas_inventario (producto_id, cantidad, nota) VALUES (?, ?, ?)').bind(productoId, cantidad, nota ?? null).run();
 }
