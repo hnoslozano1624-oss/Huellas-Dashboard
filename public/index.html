@@ -3130,7 +3130,7 @@ document.getElementById('cajaSaldoGuardar').addEventListener('click', () => {
   const efectivo = parseFloat(document.getElementById('cajaSaldoEfectivo').value) || 0;
   const bancos = parseFloat(document.getElementById('cajaSaldoBancos').value) || 0;
   if (efectivo === 0 && bancos === 0) { statusEl.textContent = 'Ingresa al menos un valor mayor a 0.'; return; }
-  const fechaDB = fechaInput + ' 00:00:01';
+  const fechaDB = fechaInput + ' 05:00:01'; // medianoche de Colombia (UTC-5)
   const fechaDisplay = new Date(fechaInput + 'T12:00:00').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
   if (efectivo > 0) registrarMovimientoCaja('Efectivo', 'Ingreso', efectivo, 'Saldo inicial del periodo', fechaDisplay, null, false, fechaDB);
   if (bancos > 0) registrarMovimientoCaja('Bancos', 'Ingreso', bancos, 'Saldo inicial del periodo', fechaDisplay, null, false, fechaDB);
