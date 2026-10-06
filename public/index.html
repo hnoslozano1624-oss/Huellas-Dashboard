@@ -830,7 +830,7 @@
 
         <div class="subpanel active" id="sub-oc">
 
-          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ol><li>Agregue cada producto con su cantidad y valor.</li><li>La fecha de vencimiento es obligatoria en cada producto.</li><li>Al guardar, los productos entran al inventario. Si el valor es $0, solo se suma inventario y no se mueve la caja.</li></ol></details>
+          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ol><li>Agregue cada producto con su cantidad y valor.</li><li>La fecha de vencimiento es obligatoria, excepto en arenas y accesorios, que no vencen.</li><li>Al guardar, los productos entran al inventario. Si el valor es $0, solo se suma inventario y no se mueve la caja.</li></ol></details>
 
           <div class="card" style="margin-bottom:16px;">
             <h3>1. Proveedor y fecha</h3>
@@ -4072,6 +4072,11 @@ function llenarOcProductos() {
   sel.innerHTML = '<option value="">Elige el producto (' + prods.length + ')...</option>';
   prods.forEach(p => { const o = document.createElement('option'); o.value = p.cod; o.textContent = p.producto + ' — ' + p.cod; sel.appendChild(o); });
 }
+const OC_CATS_SIN_VENC = ['ARENAS', 'ACCESORIOS'];
+function ocSinVencimiento(it) {
+  const p = LISTA_PRECIOS.find(x => x.cod === it.cod);
+  return !!p && OC_CATS_SIN_VENC.includes((p.categoria || '').toUpperCase());
+}
 function agregarProductoOc(p) {
   OC_ITEMS.push({
     cod: p.cod,
@@ -4141,7 +4146,7 @@ function renderOc() {
         <td data-label="Producto" class="prod">${item.producto}</td>
         <td class="num" data-label="Cantidad"><input class="lp-edit" type="number" min="1" value="${item.cantidad}" data-idx="${idx}" data-field="cantidad"></td>
         <td class="num" data-label="Valor unitario"><input class="lp-edit" type="number" min="0" value="${item.valor}" data-idx="${idx}" data-field="valor"></td>
-        <td data-label="Vence"><input class="lp-edit" type="date" value="${item.fechaVenc || ''}" data-idx="${idx}" data-field="fechaVenc" required></td>
+        <td data-label="Vence"><input class="lp-edit" type="date" value="${item.fechaVenc || ''}" data-idx="${idx}" data-field="fechaVenc"${ocSinVencimiento(item) ? '' : ' required'}>${ocSinVencimiento(item) ? '<div class="sub" style="margin:2px 0 0;font-size:0.72rem;">No aplica — opcional</div>' : ''}</td>
         <td class="num" data-label="Subtotal">${fmtCOPc(item.cantidad * item.valor)}</td>
         <td class="acc"><button class="lp-remove-btn" data-idx="${idx}">Quitar</button></td>
       `;
@@ -4259,8 +4264,8 @@ document.getElementById('ocGuardar').addEventListener('click', async () => {
   const statusEl = document.getElementById('ocStatus');
   statusEl.style.color = 'var(--danger, #B24A3B)';
   if (OC_ITEMS.length === 0) { statusEl.textContent = 'Agrega al menos un producto.'; return; }
-  const sinFecha = OC_ITEMS.find(it => !it.fechaVenc);
-  if (sinFecha) { statusEl.textContent = 'Falta la fecha de vencimiento de "' + sinFecha.producto + '". Es obligatoria para cada producto.'; return; }
+  const sinFecha = OC_ITEMS.find(it => !it.fechaVenc && !ocSinVencimiento(it));
+  if (sinFecha) { statusEl.textContent = 'Falta la fecha de vencimiento de "' + sinFecha.producto + '". Es obligatoria, salvo en arenas y accesorios.'; return; }
   const sinProd = OC_ITEMS.find(it => !DB_PRODUCTO_ID[it.cod]);
   if (sinProd) { statusEl.textContent = '"' + sinProd.producto + '" no está en el catálogo del inventario.'; return; }
   const provSelVal = document.getElementById('ocProveedorSelect').value;
@@ -4287,7 +4292,7 @@ document.getElementById('ocGuardar').addEventListener('click', async () => {
       body: JSON.stringify({
         oc_numero: OC_EDITING_NUM, proveedor: proveedorNombre, celular, direccion, cuenta_pago: cuentaPago,
         fecha: fechaInput + ' 12:00:00',
-        items: OC_ITEMS.map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad, costo_unitario: it.valor, fecha_vencimiento: it.fechaVenc }))
+        items: OC_ITEMS.map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad, costo_unitario: it.valor, fecha_vencimiento: it.fechaVenc || null }))
       })
     });
     if (!r.ok) {
