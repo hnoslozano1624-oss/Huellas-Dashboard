@@ -1239,14 +1239,14 @@
           <div class="lp-form-grid">
             <div>
               <label>Mes del reporte</label>
-              <input type="month" id="repMesFiltro" min="2025-03" max="2026-07">
+              <input type="month" id="repMesFiltro" min="2025-03">
             </div>
           </div>
         </div>
 
         <div class="alert" style="margin-bottom:16px;">
           <span class="ico">ℹ️</span>
-          <div>Estos reportes se arman con los totales mensuales por línea y canal que ya tiene el dashboard. Cuando el módulo de Ventas quede conectado a la base de datos en vivo, se podrán generar con el detalle de cada pedido.</div>
+          <div>Estos reportes se arman con los pedidos registrados en el sistema (desde agosto 2026) y el histórico de ventas cargado en el dashboard. Se puede descargar cualquier mes con ventas.</div>
         </div>
 
         <div class="card">
@@ -4464,32 +4464,46 @@ function datosAnuales(anioSel) {
   };
 }
 
+function listaPct(obj) {
+  const ent = Object.entries(obj || {}).filter(([, v]) => v > 0);
+  const tot = ent.reduce((a, [, v]) => a + v, 0);
+  return ent.map(([n, v]) => ({ nombre: n, valor: v, pct: tot > 0 ? Math.round((v / tot) * 100) : 0 })).sort((a, b) => b.valor - a.valor);
+}
 function datosMesReporte() {
   const filtro = document.getElementById('repMesFiltro').value;
   const [anioSel, mesSelNum] = filtro.split('-').map(Number);
   const mesIdx = mesSelNum - 1;
-  const arrKey = 'ventas_' + anioSel + '_mensual';
-  const arrAnterior = 'ventas_' + (anioSel - 1) + '_mensual';
-  const ventasMes = (DATA[arrKey] || [])[mesIdx] || 0;
-  const ventasAcumAnio = (DATA[arrKey] || []).slice(0, mesIdx + 1).reduce((a, b) => a + b, 0);
-  const ventasMesAnterior = DATA[arrAnterior] ? (DATA[arrAnterior][mesIdx] || 0) : null;
+  const m = datosMes(anioSel, mesIdx);
+  let acum = 0;
+  for (let i = 0; i <= mesIdx; i++) acum += datosMes(anioSel, i).ventas || 0;
+  const prev = datosMes(anioSel - 1, mesIdx);
   const nombreMes = DATA.meses[mesIdx] + ' ' + anioSel;
-  return { anioSel, mesIdx, nombreMes, ventasMes, ventasAcumAnio, ventasMesAnterior, ...datosAnuales(anioSel) };
+  return {
+    anioSel, mesIdx, nombreMes, ventasMes: m.ventas || 0, ventasAcumAnio: acum,
+    ventasMesAnterior: prev && prev.ventas > 0 ? prev.ventas : null,
+    pedidos: m.pedidos || 0, clientes: m.clientes || 0, nuevos: m.nuevos || 0,
+    ticket: m.pedidos ? m.ventas / m.pedidos : 0,
+    porLinea: listaPct(m.linea), porCanal: listaPct(m.canal), porVendedor: m.vendedor ? listaPct(m.vendedor) : []
+  };
 }
 
 function generarInsights(d) {
   const bullets = [];
   if (d.porCanal.length > 0) {
-    const topCanal = d.porCanal[0];
-    bullets.push('El canal "' + topCanal.nombre + '" concentra el ' + topCanal.pct + '% de las ventas del año ' + d.anioSel + ' — vale la pena seguir invirtiendo tiempo comercial ahí.');
+    const t = d.porCanal[0];
+    bullets.push('El canal "' + t.nombre + '" concentró el ' + t.pct + '% de las ventas de ' + d.nombreMes + ' — vale la pena seguir invirtiendo tiempo comercial ahí.');
   }
   if (d.porLinea.length > 0) {
-    const topLinea = d.porLinea[0];
-    bullets.push('"' + topLinea.nombre + '" es la línea líder con el ' + topLinea.pct + '% de las ventas del año — asegurar su inventario debe ser prioridad frente a otras líneas.');
+    const t = d.porLinea[0];
+    bullets.push('"' + t.nombre + '" fue la línea líder del mes con el ' + t.pct + '% de las ventas — asegurar su inventario debe ser prioridad.');
   }
-  const digital = d.porCanal.filter(c => /whatsapp|redes/i.test(c.nombre)).reduce((s, c) => s + c.pct, 0);
+  const digital = d.porCanal.filter(c => /whatsapp|redes/i.test(c.nombre)).reduce((sm, c) => sm + c.pct, 0);
   if (digital > 0 && digital < 15) {
-    bullets.push('Los canales digitales (WhatsApp/pauta y redes sociales) suman apenas ' + digital + '% de las ventas del año — hay espacio para crecer ahí sin depender solo de ferias y voz a voz.');
+    bullets.push('Los canales digitales (WhatsApp/pauta y redes sociales) sumaron apenas ' + digital + '% de las ventas del mes — hay espacio para crecer ahí sin depender solo de ferias y voz a voz.');
+  }
+  if (d.porVendedor.length > 1) {
+    const t = d.porVendedor[0];
+    bullets.push(t.nombre + ' lideró las ventas del mes con el ' + t.pct + '% del total.');
   }
   if (d.ventasMesAnterior !== null && d.ventasMesAnterior > 0) {
     const pct = Math.round(((d.ventasMes - d.ventasMesAnterior) / d.ventasMesAnterior) * 1000) / 10;
@@ -4501,7 +4515,9 @@ function generarInsights(d) {
 
 try {
   const rf = document.getElementById('repMesFiltro');
-  rf.value = '2026-07';
+  const hoyR = new Date();
+  rf.max = hoyR.getFullYear() + '-' + String(hoyR.getMonth() + 1).padStart(2, '0');
+  rf.value = mesPasadoISO();
 } catch (e) {}
 
 document.getElementById('repDescargarPdf').addEventListener('click', () => {
@@ -4509,6 +4525,7 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
   try {
     statusEl.textContent = 'Generando PDF...';
     const d = datosMesReporte();
+    if (!d.ventasMes) { statusEl.textContent = 'No hay ventas registradas en ' + d.nombreMes.toLowerCase() + '.'; return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
     const pageW = doc.internal.pageSize.getWidth();
@@ -4533,6 +4550,9 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
     if (d.ventasMesAnterior !== null) {
       doc.text('Mismo mes año anterior: ' + fmtCOP(d.ventasMesAnterior), margin, y); y += 16;
     }
+    if (d.pedidos) {
+      doc.text('Pedidos del mes: ' + d.pedidos + ' · Clientes: ' + d.clientes + (d.nuevos ? ' (nuevos: ' + d.nuevos + ')' : '') + ' · Ticket promedio: ' + fmtCOP(d.ticket), margin, y); y += 16;
+    }
     y += 14;
 
     function tabla(titulo, filas) {
@@ -4541,7 +4561,7 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
       doc.setFillColor(...INK);
       doc.rect(margin, y, pageW - 2*margin, 20, 'F');
       doc.setTextColor(255,255,255); doc.setFontSize(9); doc.setFont('helvetica', 'bold');
-      doc.text('LÍNEA / CANAL', margin + 8, y + 14);
+      doc.text(titulo.indexOf('línea')>-1?'LÍNEA':titulo.indexOf('canal')>-1?'CANAL':'VENDEDOR', margin + 8, y + 14);
       doc.text('VALOR', margin + 260, y + 14);
       doc.text('%', margin + 360, y + 14);
       y += 20;
@@ -4556,8 +4576,10 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
       });
       y += 16;
     }
-    tabla('Ventas por línea (acumulado año ' + d.anioSel + ')', d.porLinea);
-    tabla('Ventas por canal (acumulado año ' + d.anioSel + ')', d.porCanal);
+    tabla('Ventas por línea — ' + d.nombreMes, d.porLinea);
+    if (y > 600) { doc.addPage(); y = 60; }
+    tabla('Ventas por canal — ' + d.nombreMes, d.porCanal);
+    if (d.porVendedor.length) { if (y > 600) { doc.addPage(); y = 60; } tabla('Ventas por vendedor — ' + d.nombreMes, d.porVendedor); }
 
     if (y > 620) { doc.addPage(); y = 60; }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...JADE_DARK);
@@ -4570,7 +4592,7 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
     });
 
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
-    doc.text('Basado en los totales mensuales por línea y canal disponibles en el dashboard.', margin, 760);
+    doc.text('Basado en los pedidos registrados en el sistema y en el histórico de ventas cargado en el dashboard.', margin, 760);
 
     const blob = doc.output('blob');
     const filename = 'Reporte_Ejecutivo_' + d.nombreMes.replace(' ', '_') + '.pdf';
@@ -4590,18 +4612,22 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
   try {
     statusEl.textContent = 'Generando Excel...';
     const d = datosMesReporte();
+    if (!d.ventasMes) { statusEl.textContent = 'No hay ventas registradas en ' + d.nombreMes.toLowerCase() + '.'; return; }
 
     const resumen = [
       ['Huellas Online — Ventas', d.nombreMes],
       [],
       ['Ventas del mes', d.ventasMes],
       ['Acumulado del año ' + d.anioSel, d.ventasAcumAnio],
-      ['Mismo mes año anterior', d.ventasMesAnterior !== null ? d.ventasMesAnterior : 'Sin dato']
+      ['Mismo mes año anterior', d.ventasMesAnterior !== null ? d.ventasMesAnterior : 'Sin dato'],
+      ['Pedidos del mes', d.pedidos],
+      ['Clientes', d.clientes],
+      ['Ticket promedio', Math.round(d.ticket)]
     ];
-    const porLineaSheet = [['Línea', 'Valor', '% del año']].concat(
+    const porLineaSheet = [['Línea', 'Valor', '% del mes']].concat(
       d.porLinea.map(f => [f.nombre.charAt(0) + f.nombre.slice(1).toLowerCase(), f.valor, f.pct + '%'])
     );
-    const porCanalSheet = [['Canal', 'Valor', '% del año']].concat(
+    const porCanalSheet = [['Canal', 'Valor', '% del mes']].concat(
       d.porCanal.map(f => [f.nombre.charAt(0) + f.nombre.slice(1).toLowerCase(), f.valor, f.pct + '%'])
     );
 
@@ -4609,6 +4635,9 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), 'Resumen');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(porLineaSheet), 'Por línea');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(porCanalSheet), 'Por canal');
+    if (d.porVendedor.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Vendedor', 'Valor', '% del mes']].concat(d.porVendedor.map(f => [f.nombre, f.valor, f.pct + '%']))), 'Por vendedor');
+    }
 
     const filename = 'Ventas_' + d.nombreMes.replace(' ', '_') + '.xlsx';
     XLSX.writeFile(wb, filename);
