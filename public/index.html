@@ -331,18 +331,22 @@
   .ped-cliente-row .ped-nuevo-btn { flex-shrink: 0; width: auto; margin: 0; padding: 8px 14px; white-space: nowrap; }
   #pedStatus { display: block; margin: 12px 0 0 !important; font-size: 0.95rem; line-height: 1.4; }
   .ped-ok { display: block; padding: 12px 14px; border-radius: 10px; background: rgba(63,115,100,0.14); }
-  .ca-wrap { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
-  .ca-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 10px; min-width: 200px; background: var(--bg); }
-  .ca-box .ca-t { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 700; }
-  .ca-box .ca-row { display: flex; gap: 8px; align-items: stretch; }
-  .ca-box .ca-row input { width: 120px; min-width: 0; }
-  .ca-box .ca-row select { width: auto; min-width: 128px; flex: 1; }
-  .ca-btn { all: unset; cursor: pointer; box-sizing: border-box; text-align: center; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; }
+  .ca-btns { display: flex; flex-direction: column; gap: 6px; width: 170px; }
+  .ca-btn { all: unset; cursor: pointer; box-sizing: border-box; text-align: center; padding: 9px 12px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; }
   .ca-btn.abonar { background: var(--jade); color: #fff; }
-  .ca-btn.total { border: 2px solid var(--jade); color: var(--jade-dark); background: transparent; }
-  .ca-box.total { border-color: var(--jade); }
-  .ca-btn.sinCaja { display: block; width: 100%; margin-top: 10px; border: 1px dashed var(--muted); color: var(--muted); font-weight: 600; font-size: 0.8rem; }
-  .ca-btn.sinCaja:hover { color: var(--ink); border-color: var(--ink); }
+  .ca-btn.total { border: 2px solid var(--jade); color: var(--jade-dark); background: transparent; padding: 7px 12px; }
+  .ca-btn.sinCaja { color: var(--muted); font-weight: 600; font-size: 0.8rem; padding: 6px 12px; text-decoration: underline; }
+  .ca-btn.sinCaja:hover { color: var(--ink); }
+  .ca-btns .ca-btn.activo { box-shadow: 0 0 0 3px rgba(92,158,138,0.3); }
+  .ca-btn.ca-cancel { border: 1px solid var(--card-border); color: var(--muted); font-weight: 600; }
+  .ca-btn:disabled { opacity: .5; cursor: default; }
+  .ca-panel { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--jade); border-radius: 10px; background: var(--bg); width: 250px; max-width: 100%; box-sizing: border-box; }
+  .ca-panel[hidden] { display: none; }
+  .ca-panel-t { font-size: 0.78rem; font-weight: 700; margin-bottom: 8px; }
+  .ca-panel .ca-row { display: flex; gap: 8px; margin-top: 8px; }
+  .ca-panel .ca-row input { flex: 1; min-width: 0; width: auto; }
+  .ca-panel .ca-row select { flex: 1; min-width: 0; width: auto; }
+  .ca-panel .ca-row .ca-btn { flex: 1; }
   .cartera-filtro { max-width: 320px; margin-bottom: 14px; }
   .cartera-filtro label { display: block; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
   .ped-sticky { display: none; }
@@ -415,9 +419,9 @@
     table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .lp-form-grid { grid-template-columns: 1fr; }
     .ped-cliente-row { flex-direction: column; }
-    .ca-wrap { flex-direction: column; width: 100%; }
-    .ca-box { width: 100%; }
-    .ca-box .ca-row input { width: auto; flex: 1; }
+    table.t-cards td.cartera-accion { flex-direction: column; align-items: stretch; }
+    .ca-btns { width: 100%; }
+    .ca-panel { width: 100%; }
     .cartera-filtro { max-width: none; }
     .ped-cliente-row .ped-nuevo-btn { width: 100%; }
     .card { padding: 14px; }
@@ -3008,24 +3012,22 @@ function renderCartera() {
         <td class="num" data-label="Abonado">${fmtCOPc(c.abonado || 0)}</td>
         <td class="num" data-label="Saldo"><b>${fmtCOPc(saldo)}</b></td>
         <td class="cartera-accion acc">
-          <div class="ca-wrap">
-            <div class="ca-box">
-              <div class="ca-t">Abonar</div>
-              <div class="ca-row">
-                <input type="number" class="cartera-abono-input" placeholder="Valor a abonar" min="0">
-                <select class="cartera-abono-medio"><option>Efectivo</option><option>Transferencia</option></select>
-              </div>
-              <button class="ca-btn abonar cartera-abonar-btn" data-num="${c.pedidoNum}">Abonar</button>
+          <div class="ca-btns">
+            <button type="button" class="ca-btn abonar" data-modo="abono">Abonar</button>
+            <button type="button" class="ca-btn total" data-modo="total">Pago total</button>
+            <button type="button" class="ca-btn sinCaja cartera-sincaja-btn" data-num="${c.pedidoNum}">Ya se pagó antes</button>
+          </div>
+          <div class="ca-panel" hidden>
+            <div class="ca-panel-t"></div>
+            <div class="ca-row">
+              <input type="number" class="cartera-abono-input" placeholder="Valor" min="0" inputmode="numeric">
+              <select class="cartera-medio"><option>Efectivo</option><option>Transferencia</option></select>
             </div>
-            <div class="ca-box total">
-              <div class="ca-t">Pagar saldo completo (${fmtCOPc(saldo)})</div>
-              <div class="ca-row">
-                <select class="cartera-total-medio"><option>Efectivo</option><option>Transferencia</option></select>
-              </div>
-              <button class="ca-btn total cartera-pagartotal-btn" data-num="${c.pedidoNum}">Pago total</button>
+            <div class="ca-row">
+              <button type="button" class="ca-btn abonar ca-ok" data-num="${c.pedidoNum}">Confirmar</button>
+              <button type="button" class="ca-btn ca-cancel">Cancelar</button>
             </div>
           </div>
-          <button type="button" class="ca-btn sinCaja cartera-sincaja-btn" data-num="${c.pedidoNum}">Ya se pagó antes — saldar sin mover caja</button>
         </td>`;
       tbody.appendChild(tr);
     });
@@ -3040,16 +3042,32 @@ function renderCartera() {
     document.getElementById('kpiCarteraDashSub').textContent = CARTERA.length + (CARTERA.length === 1 ? ' cliente debe' : ' clientes deben');
   }
 
-  tbody.querySelectorAll('.cartera-abonar-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tr = btn.closest('tr');
-      const input = tr.querySelector('.cartera-abono-input');
-      const medio = tr.querySelector('.cartera-abono-medio').value;
-      const monto = parseFloat(input.value);
-      if (!monto || monto <= 0) { input.focus(); return; }
-      const cc = CARTERA.find(x => x.pedidoNum === btn.dataset.num);
-      if (!confirm('¿Registrar un abono de ' + fmtCOPc(monto) + ' (' + medio + ') de ' + (cc ? cc.cliente : 'este cliente') + '? Entrará a Caja hoy.')) return;
-      registrarAbonoCartera(btn.dataset.num, monto, medio);
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const panel = tr.querySelector('.ca-panel');
+    if (!panel) return;
+    const num = tr.dataset.pedidoNum;
+    const titulo = panel.querySelector('.ca-panel-t');
+    const input = panel.querySelector('.cartera-abono-input');
+    const ok = panel.querySelector('.ca-ok');
+    let modo = null;
+    const cerrar = () => { panel.hidden = true; modo = null; tr.querySelectorAll('.ca-btns .ca-btn').forEach(b => b.classList.remove('activo')); };
+    tr.querySelectorAll('.ca-btns [data-modo]').forEach(b => b.addEventListener('click', () => {
+      const c = CARTERA.find(x => x.pedidoNum === num); if (!c) return;
+      const saldo = c.saldo != null ? c.saldo : c.total;
+      if (modo === b.dataset.modo) { cerrar(); return; }
+      cerrar(); modo = b.dataset.modo; b.classList.add('activo'); panel.hidden = false;
+      if (modo === 'abono') { titulo.textContent = 'Abono parcial — ¿cuánto pagó?'; input.style.display = ''; input.value = ''; input.focus(); ok.textContent = 'Confirmar abono'; }
+      else { titulo.textContent = 'Pago total de ' + fmtCOPc(saldo); input.style.display = 'none'; ok.textContent = 'Confirmar pago total'; }
+    }));
+    panel.querySelector('.ca-cancel').addEventListener('click', cerrar);
+    ok.addEventListener('click', () => {
+      const c = CARTERA.find(x => x.pedidoNum === num); if (!c || !modo) return;
+      const saldo = c.saldo != null ? c.saldo : c.total;
+      const medio = panel.querySelector('.cartera-medio').value;
+      let monto = saldo;
+      if (modo === 'abono') { monto = parseFloat(input.value); if (!monto || monto <= 0) { input.focus(); return; } }
+      ok.disabled = true;
+      registrarAbonoCartera(num, monto, medio);
     });
   });
   tbody.querySelectorAll('.cartera-sincaja-btn').forEach(btn => {
@@ -3064,16 +3082,6 @@ function renderCartera() {
         await sincronizarCarteraDesdeD1();
         try { renderCajaMovimientos(); } catch (e) {}
       } catch (e) { alert('Sin conexión con el servidor.'); }
-    });
-  });
-  tbody.querySelectorAll('.cartera-pagartotal-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tr = btn.closest('tr');
-      const medio = tr.querySelector('.cartera-total-medio').value;
-      const c = CARTERA.find(x => x.pedidoNum === btn.dataset.num);
-      if (!c) return;
-      if (!confirm('¿Registrar el PAGO TOTAL de ' + c.cliente + ' por ' + fmtCOPc(c.saldo != null ? c.saldo : c.total) + ' (' + medio + ')? Entrará a Caja hoy.')) return;
-      registrarAbonoCartera(btn.dataset.num, c.saldo != null ? c.saldo : c.total, medio);
     });
   });
 }
