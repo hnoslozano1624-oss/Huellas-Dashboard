@@ -4695,7 +4695,7 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
     const mil = { callback: v => v >= 1000000 ? '$' + (v / 1000000).toFixed(1).replace('.', ',') + 'M' : '$' + Math.round(v / 1000) + 'K' };
     const etiquetasPuntos = {
       id: 'vp', afterDatasetsDraw(chart) {
-        const c = chart.ctx; c.save(); c.font = '600 9px Helvetica, Arial, sans-serif'; c.textAlign = 'center';
+        const c = chart.ctx; c.save(); c.font = '500 8px Helvetica, Arial, sans-serif'; c.textAlign = 'center';
         chart.data.datasets.forEach((ds, di) => {
           const arriba = di === chart.data.datasets.length - 1;
           c.fillStyle = arriba ? '#3F7364' : '#B5705F'; c.textBaseline = arriba ? 'bottom' : 'top';
@@ -4731,10 +4731,10 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
           chart.getDatasetMeta(0).data.forEach((arc, i) => {
             const v = obj[i].valor, pc = tot ? (v / tot) * 100 : 0; if (pc < 4) return;
             const pos = arc.tooltipPosition(); c.fillStyle = TXT_CLARO[i % 7] ? '#ffffff' : '#2c2c2c';
-            const grande = pc >= 12;
-            c.font = '700 ' + (grande ? 14 : 11) + 'px Helvetica, Arial, sans-serif';
-            c.fillText(Math.round(pc) + '%', pos.x, pos.y - (grande ? 6 : 0));
-            if (grande) { c.font = '600 9px Helvetica, Arial, sans-serif'; c.fillText(fmtCOP(v), pos.x, pos.y + 8); }
+            const grande = pc >= 15;
+            c.font = '600 ' + (grande ? 11 : 9) + 'px Helvetica, Arial, sans-serif';
+            c.fillText(Math.round(pc) + '%', pos.x, pos.y - (grande ? 5 : 0));
+            if (grande) { c.font = '400 7.5px Helvetica, Arial, sans-serif'; c.fillText(fmtCOP(v), pos.x, pos.y + 6); }
           }); c.restore(); } }] };
     }
     try {
@@ -4753,8 +4753,8 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
             const c = chart.ctx; c.save(); c.textAlign = 'center'; c.textBaseline = 'bottom'; c.fillStyle = '#2c2c2c';
             chart.getDatasetMeta(0).data.forEach((bar, i) => {
               const v = d.porVendedor[i].valor;
-              c.font = '700 11px Helvetica, Arial, sans-serif'; c.fillText(fmtCOP(v), bar.x, bar.y - 14);
-              c.font = '600 10px Helvetica, Arial, sans-serif'; c.fillStyle = '#3F7364'; c.fillText(Math.round(totV ? (v / totV) * 100 : 0) + '%', bar.x, bar.y - 3); c.fillStyle = '#2c2c2c';
+              c.font = '600 9.5px Helvetica, Arial, sans-serif'; c.fillText(fmtCOP(v), bar.x, bar.y - 13);
+              c.font = '500 8.5px Helvetica, Arial, sans-serif'; c.fillStyle = '#3F7364'; c.fillText(Math.round(totV ? (v / totV) * 100 : 0) + '%', bar.x, bar.y - 3); c.fillStyle = '#2c2c2c';
             }); c.restore(); } }]
         }, 516, 210), margin, 516, 210);
         y += 236;
