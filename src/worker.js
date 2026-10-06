@@ -401,6 +401,7 @@ async function handleApi(request, env, url) {
        JOIN clientes c ON c.id = pe.cliente_id
        JOIN usuarios u ON u.id = pe.vendedor_id
        WHERE pe.estado_pago = 'pendiente'
+         AND pe.forma_pago NOT IN ('Efectivo', 'Transferencia')
        ORDER BY pe.fecha ASC`
     ).all();
     results.forEach(r => { r.saldo = r.total - r.abonado; });

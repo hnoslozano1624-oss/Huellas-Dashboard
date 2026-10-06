@@ -312,6 +312,25 @@
   .ped-res button:hover { background: rgba(0,0,0,0.04); }
   .ped-res button .pr { font-weight: 700; white-space: nowrap; }
   .ped-res .ped-msg { padding: 10px 14px; font-size: 0.88rem; color: var(--muted); }
+  .ped-items { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .ped-item { border: 1px solid var(--card-border); border-radius: 12px; padding: 12px; background: var(--bg); }
+  .ped-item .pi-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .ped-item .pi-name { font-weight: 700; font-size: 0.95rem; line-height: 1.3; word-break: break-word; }
+  .ped-item .pi-pres { display: inline-block; margin-top: 5px; font-size: 0.76rem; font-weight: 600; background: rgba(63,115,100,0.14); color: var(--jade-dark); border-radius: 999px; padding: 2px 10px; }
+  .ped-item .pi-x { all: unset; cursor: pointer; flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; text-align: center; line-height: 32px; font-size: 1rem; color: var(--danger, #B24A3B); background: rgba(178,74,59,0.1); }
+  .ped-item .pi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .ped-item .pi-row label { display: block; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .ped-item .pi-row input[type=number] { width: 100%; box-sizing: border-box; font-family: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--ink); font-size: 16px; text-align: right; }
+  .ped-item .pi-qty { display: flex; align-items: stretch; gap: 6px; }
+  .ped-item .pi-qty button { all: unset; cursor: pointer; flex: 0 0 40px; text-align: center; font-size: 1.25rem; font-weight: 700; border-radius: 8px; border: 1px solid var(--card-border); background: var(--card-bg); color: var(--jade-dark); user-select: none; }
+  .ped-item .pi-qty input { text-align: center !important; min-width: 0; }
+  .ped-item .pi-sub { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--card-border); font-size: 0.85rem; color: var(--muted); }
+  .ped-item .pi-sub b { font-size: 1.05rem; color: var(--ink); }
+  .ped-cliente-row { display: flex; gap: 10px; align-items: stretch; }
+  .ped-cliente-row select { flex: 1; min-width: 0; }
+  .ped-cliente-row .ped-nuevo-btn { flex-shrink: 0; width: auto; margin: 0; padding: 8px 14px; white-space: nowrap; }
+  #pedStatus { display: block; margin: 12px 0 0 !important; font-size: 0.95rem; line-height: 1.4; }
+  .ped-ok { display: block; padding: 12px 14px; border-radius: 10px; background: rgba(63,115,100,0.14); }
   .ped-sticky { display: none; }
   .grid-eq { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 780px) { .grid-eq { grid-template-columns: 1fr; } }
@@ -381,6 +400,8 @@
     input, select, textarea { font-size: 16px; }
     table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .lp-form-grid { grid-template-columns: 1fr; }
+    .ped-cliente-row { flex-direction: column; }
+    .ped-cliente-row .ped-nuevo-btn { width: 100%; }
     .card { padding: 14px; }
     .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .kpi { padding: 14px; }
@@ -1248,13 +1269,15 @@
 
         <div class="card" style="margin-bottom:16px;">
           <h3>2. Cliente</h3>
-          <div class="lp-form-grid">
+          <div class="lp-form-grid" style="grid-template-columns:1fr;">
             <div>
               <label>Cliente</label>
-              <select id="pedClienteSelect">
-                <option value="">Selecciona...</option>
-                <option value="__nuevo__">+ Cliente nuevo</option>
-              </select>
+              <div class="ped-cliente-row">
+                <select id="pedClienteSelect">
+                  <option value="">Selecciona...</option>
+                </select>
+                <button type="button" id="pedNuevoClienteBtn" class="lp-add-btn ped-nuevo-btn">+ Nuevo cliente</button>
+              </div>
             </div>
           </div>
           <div id="pedClienteNuevoFields" class="lp-form-grid" style="margin-top:12px; display:none;">
@@ -1297,12 +1320,7 @@
             </div>
           </div>
 
-          <table id="pedTable" style="margin-top:16px;">
-            <thead>
-              <tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio unit.</th><th class="num">Subtotal</th><th></th></tr>
-            </thead>
-            <tbody id="pedBody"></tbody>
-          </table>
+          <div id="pedItems" class="ped-items"></div>
           <div id="pedVacio" class="sub" style="margin-top:10px;">Todavía no has agregado productos a este pedido.</div>
           <div class="cot-total-row">
             <span>Total del pedido</span>
@@ -1339,16 +1357,6 @@
           <button type="button" class="lp-add-btn" id="pedStickyBtn">Enviar pedido</button>
         </div>
 
-        <section style="margin-top:26px;">
-          <div class="section-title"><span class="dot"></span>Últimos pedidos enviados</div>
-          <div class="card scrollx">
-            <div class="sub" id="pedHistVacio">Todavía no se ha enviado ningún pedido.</div>
-            <table class="t-cards" id="pedHistTable" style="display:none;">
-              <thead><tr><th>N° Pedido</th><th>Vendedor</th><th>Cliente</th><th class="num">Total</th><th>Forma de pago</th><th></th></tr></thead>
-              <tbody id="pedHistBody"></tbody>
-            </table>
-          </div>
-        </section>
       </div>
 
     </div>
@@ -2585,9 +2593,10 @@ cotSearchInput.addEventListener('input', () => {
   const q = cotSearchInput.value.trim().toLowerCase();
   if (q.length < 1) { cotResultadosBox.classList.remove('show'); cotResultadosBox.innerHTML = ''; return; }
 
-  const porCodigo = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod) && p.cod.toLowerCase().includes(q));
+  const vendible = (p) => !(p.mid || /^ID9\d{6}$/.test(p.cod || ''));
+  const porCodigo = LISTA_PRECIOS.filter(p => vendible(p) && esCodigoReal(p.cod) && p.cod.toLowerCase().includes(q));
   const porNombre = q.length >= 2
-    ? LISTA_PRECIOS.filter(p => !(p.cod && p.cod.toLowerCase().includes(q)) && (p.marca + ' ' + p.producto).toLowerCase().includes(q))
+    ? LISTA_PRECIOS.filter(p => vendible(p) && !(p.cod && p.cod.toLowerCase().includes(q)) && (p.marca + ' ' + p.producto).toLowerCase().includes(q))
     : [];
   const matches = [...porCodigo, ...porNombre].slice(0, 8);
 
@@ -2914,6 +2923,14 @@ document.getElementById('cotDescargar').addEventListener('click', async () => {
 
 // ---- Solicitud de pedidos ----
 let PED_ITEMS = [];
+function pedNombreProd(p) { return (p.marca ? p.marca + ' — ' : '') + p.producto; }
+function pedEntero(v) { const n = Math.floor(parseFloat(v)); return (isFinite(n) && n >= 1) ? n : 1; }
+function pedPrecio(v) { const n = parseFloat(v); return (isFinite(n) && n >= 0) ? n : 0; }
+function pedPresentDe(item) {
+  if (item.present) return item.present;
+  const p = LISTA_PRECIOS.find(x => x.cod === item.cod);
+  return p && p.present ? p.present : '';
+}
 let PEDIDOS_HISTORIAL = [];
 function mesConDatosMasReciente() {
   const reales = PEDIDOS_HISTORIAL.filter(p => p.dbId);
@@ -3001,7 +3018,7 @@ async function sincronizarCarteraDesdeD1() {
     if (r.ok) {
       const filas = await r.json();
       CARTERA.length = 0;
-      filas.forEach(f => {
+      filas.filter(f => f.forma_pago !== 'Efectivo' && f.forma_pago !== 'Transferencia').forEach(f => {
         const fechaF = new Date((f.fecha || '').replace(' ', 'T') + 'Z');
         CARTERA.push({
           pedidoNum: String(f.id), cliente: f.cliente, vendedor: f.vendedor, total: f.total,
@@ -3096,7 +3113,7 @@ function renderCajaMovimientos() {
     kEfec.textContent = fmtCOPc(CAJA_EFECTIVO);
     document.getElementById('kpiCajaBancos').textContent = fmtCOPc(CAJA_BANCOS);
     document.getElementById('kpiCajaTotal').textContent = fmtCOPc(CAJA_EFECTIVO + CAJA_BANCOS);
-    document.getElementById('kpiCajaCartera').textContent = fmtCOPc(CARTERA.reduce((s, c) => s + c.total, 0));
+    document.getElementById('kpiCajaCartera').textContent = fmtCOPc(CARTERA.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0));
   }
 }
 try { renderCajaMovimientos(); } catch (e) {}
@@ -3174,7 +3191,7 @@ document.getElementById('carteraDescargarPDF').addEventListener('click', async (
     doc.text('Vendedor', colX[1], y + 16);
     doc.text('Tipo de crédito', colX[2], y + 16);
     doc.text('Fecha', colX[3], y + 16);
-    doc.text('Valor', colX[4], y + 16);
+    doc.text('Saldo', colX[4], y + 16);
     y += 24;
 
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
@@ -3187,14 +3204,14 @@ document.getElementById('carteraDescargarPDF').addEventListener('click', async (
       doc.text(c.vendedor, colX[1], y + 15);
       doc.text(c.tipoCredito, colX[2], y + 15);
       doc.text(c.fecha, colX[3], y + 15);
-      doc.text(fmtCOPc(c.total), colX[4], y + 15);
+      doc.text(fmtCOPc(c.saldo != null ? c.saldo : c.total), colX[4], y + 15);
       y += rowH;
     });
 
     y += 16;
     doc.setDrawColor(220,210,200); doc.line(margin, y, pageW - margin, y);
     y += 22;
-    const total = CARTERA.reduce((s, c) => s + c.total, 0);
+    const total = CARTERA.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...JADE_DARK);
     doc.text('Total cartera pendiente: ' + fmtCOPc(total), margin, y);
 
@@ -3219,7 +3236,7 @@ document.getElementById('carteraDescargarPDF').addEventListener('click', async (
 function refreshPedClienteSelect() {
   const sel = document.getElementById('pedClienteSelect');
   const current = sel.value;
-  sel.innerHTML = '<option value="">Selecciona...</option><option value="__nuevo__">+ Cliente nuevo</option>';
+  sel.innerHTML = '<option value="">Selecciona...</option>';
   const ordenados = CRM_CLIENTES
     .map((c, idx) => ({ c, idx }))
     .sort((a, b) => a.c.nombre.localeCompare(b.c.nombre, 'es', { sensitivity: 'base' }));
@@ -3232,8 +3249,20 @@ function refreshPedClienteSelect() {
   if (current && [...sel.options].some(o => o.value === current)) sel.value = current;
 }
 
-document.getElementById('pedClienteSelect').addEventListener('change', (e) => {
-  document.getElementById('pedClienteNuevoFields').style.display = e.target.value === '__nuevo__' ? 'grid' : 'none';
+let PED_NUEVO_CLIENTE = false;
+function setPedNuevoCliente(on) {
+  PED_NUEVO_CLIENTE = !!on;
+  const sel = document.getElementById('pedClienteSelect');
+  const btn = document.getElementById('pedNuevoClienteBtn');
+  document.getElementById('pedClienteNuevoFields').style.display = on ? 'grid' : 'none';
+  if (on) sel.value = '';
+  sel.disabled = !!on;
+  btn.textContent = on ? 'Cancelar nuevo cliente' : '+ Nuevo cliente';
+  btn.classList.toggle('lp-add-cancel', !!on);
+}
+document.getElementById('pedNuevoClienteBtn').addEventListener('click', () => {
+  setPedNuevoCliente(!PED_NUEVO_CLIENTE);
+  if (PED_NUEVO_CLIENTE) { try { document.getElementById('pedClienteNombre').focus(); } catch (e) {} }
 });
 document.getElementById('pedClienteCelular').addEventListener('input', (e) => {
   e.target.value = e.target.value.replace(/[^0-9]/g, '');
@@ -3263,7 +3292,7 @@ document.getElementById('pedCategoria').addEventListener('change', () => {
   productos.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p.cod;
-    opt.textContent = p.marca + ' — ' + p.producto + (p.present ? ' (' + p.present + ')' : '') + ' · ' + fmtCOPc(p.precio);
+    opt.textContent = pedNombreProd(p) + (p.present ? ' · ' + p.present : '') + ' · ' + fmtCOPc(p.precio);
     prodSel.appendChild(opt);
   });
 });
@@ -3273,69 +3302,58 @@ document.getElementById('pedAgregarProducto').addEventListener('click', () => {
   if (!cod) { alert('Selecciona un producto primero.'); return; }
   const p = LISTA_PRECIOS.find(x => x.cod === cod);
   if (!p) return;
-  PED_ITEMS.push({
-    cod: p.cod,
-    producto: p.marca + ' — ' + p.producto + (p.present ? ' (' + p.present + ')' : ''),
-    cantidad: 1,
-    precioUnit: p.precio || 0
-  });
+  const ex = PED_ITEMS.find(i => i.cod === p.cod);
+  if (ex) ex.cantidad = pedEntero(ex.cantidad) + 1;
+  else PED_ITEMS.push({ cod: p.cod, producto: pedNombreProd(p), present: p.present || '', cantidad: 1, precioUnit: p.precio || 0 });
   renderPedido();
 });
 
+function pedTotalActual() { return PED_ITEMS.reduce((sum, it) => sum + pedEntero(it.cantidad) * pedPrecio(it.precioUnit), 0); }
 function renderPedido() {
-  const tbody = document.getElementById('pedBody');
+  const cont = document.getElementById('pedItems');
   const vacio = document.getElementById('pedVacio');
-  const table = document.getElementById('pedTable');
-  tbody.innerHTML = '';
-  if (PED_ITEMS.length === 0) {
-    table.style.display = 'none'; vacio.style.display = 'block';
-  } else {
-    table.style.display = ''; vacio.style.display = 'none';
-    PED_ITEMS.forEach((item, idx) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${item.producto}</td>
-        <td class="num"><input class="lp-edit" type="number" min="1" value="${item.cantidad}" data-idx="${idx}" data-field="cantidad"></td>
-        <td class="num"><input class="lp-edit" type="number" value="${item.precioUnit}" data-idx="${idx}" data-field="precioUnit"></td>
-        <td class="num">${fmtCOPc(item.cantidad * item.precioUnit)}</td>
-        <td><button class="lp-remove-btn" data-idx="${idx}">Quitar</button></td>
-      `;
-      tbody.appendChild(tr);
+  cont.innerHTML = '';
+  vacio.style.display = PED_ITEMS.length === 0 ? 'block' : 'none';
+  PED_ITEMS.forEach((item, idx) => {
+    item.cantidad = pedEntero(item.cantidad);
+    item.precioUnit = pedPrecio(item.precioUnit);
+    const pres = pedPresentDe(item);
+    const card = document.createElement('div');
+    card.className = 'ped-item';
+    card.innerHTML = `
+      <div class="pi-top">
+        <div><div class="pi-name"></div>${pres ? '<span class="pi-pres"></span>' : ''}</div>
+        <button type="button" class="pi-x" data-act="del" aria-label="Quitar producto">✕</button>
+      </div>
+      <div class="pi-row">
+        <div><label>Cantidad</label>
+          <div class="pi-qty"><button type="button" data-act="menos" aria-label="Menos">−</button><input type="number" min="1" step="1" inputmode="numeric" value="${item.cantidad}" data-field="cantidad"><button type="button" data-act="mas" aria-label="Más">+</button></div></div>
+        <div><label>Precio unitario</label><input type="number" min="0" step="any" inputmode="decimal" value="${item.precioUnit}" data-field="precioUnit"></div>
+      </div>
+      <div class="pi-sub"><span>Subtotal</span><b class="pi-subval">${fmtCOPc(item.cantidad * item.precioUnit)}</b></div>`;
+    card.querySelector('.pi-name').textContent = item.producto;
+    if (pres) card.querySelector('.pi-pres').textContent = pres;
+    const upd = () => { card.querySelector('.pi-subval').textContent = fmtCOPc(item.cantidad * item.precioUnit); actualizarPedTotal(); };
+    card.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', () => {
+        if (inp.dataset.field === 'cantidad') { const n = Math.floor(parseFloat(inp.value)); if (isFinite(n) && n >= 1) item.cantidad = n; }
+        else { const n = parseFloat(inp.value); if (isFinite(n) && n >= 0) item.precioUnit = n; }
+        upd();
+      });
+      inp.addEventListener('change', () => {
+        if (inp.dataset.field === 'cantidad') { item.cantidad = pedEntero(inp.value); inp.value = item.cantidad; }
+        else { item.precioUnit = pedPrecio(inp.value); inp.value = item.precioUnit; }
+        upd();
+      });
     });
-  }
-  tbody.querySelectorAll('input').forEach(inp => {
-    inp.addEventListener('change', (e) => {
-      const idx = parseInt(e.target.dataset.idx);
-      PED_ITEMS[idx][e.target.dataset.field] = parseFloat(e.target.value) || 0;
-      renderPedido();
-    });
+    card.querySelector('[data-act="menos"]').addEventListener('click', () => { item.cantidad = Math.max(1, pedEntero(item.cantidad) - 1); renderPedido(); });
+    card.querySelector('[data-act="mas"]').addEventListener('click', () => { item.cantidad = pedEntero(item.cantidad) + 1; renderPedido(); });
+    card.querySelector('[data-act="del"]').addEventListener('click', () => { PED_ITEMS.splice(idx, 1); renderPedido(); });
+    cont.appendChild(card);
   });
-  tbody.querySelectorAll('.lp-remove-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      PED_ITEMS.splice(parseInt(e.target.dataset.idx), 1);
-      renderPedido();
-    });
-  });
-  const total = PED_ITEMS.reduce((s, it) => s + it.cantidad * it.precioUnit, 0);
-  document.getElementById('pedTotal').textContent = fmtCOPc(total);
+  actualizarPedTotal();
 }
-
-function renderPedHistorial() {
-  const tbody = document.getElementById('pedHistBody');
-  const table = document.getElementById('pedHistTable');
-  const vacio = document.getElementById('pedHistVacio');
-  tbody.innerHTML = '';
-  if (PEDIDOS_HISTORIAL.length === 0) { table.style.display = 'none'; vacio.style.display = 'block'; return; }
-  table.style.display = ''; vacio.style.display = 'none';
-  [...PEDIDOS_HISTORIAL].reverse().slice(0, 15).forEach(p => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td data-label="N° pedido">${p.pedidoNum}</td><td data-label="Vendedor">${p.vendedor}</td><td data-label="Cliente" class="prod">${p.clienteNombre}</td><td class="num" data-label="Total">${fmtCOPc(p.total)}</td><td data-label="Pago">${p.formaPago}</td><td class="acc"><button class="lp-remove-btn ped-edit-btn" data-num="${p.pedidoNum}" style="color:var(--jade-dark);">Editar</button></td>`;
-    tbody.appendChild(tr);
-  });
-  tbody.querySelectorAll('.ped-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => cargarPedidoParaEditar(btn.dataset.num));
-  });
-}
+function actualizarPedTotal() { document.getElementById('pedTotal').textContent = fmtCOPc(pedTotalActual()); }
 
 function cargarPedidoParaEditar(pedidoNum) {
   const p = PEDIDOS_HISTORIAL.find(x => x.pedidoNum === pedidoNum);
@@ -3345,7 +3363,7 @@ function cargarPedidoParaEditar(pedidoNum) {
 
   const clienteIdx = CRM_CLIENTES.findIndex(c => c.nombre === p.clienteNombre);
   document.getElementById('pedClienteSelect').value = clienteIdx >= 0 ? 'idx:' + clienteIdx : '';
-  document.getElementById('pedClienteNuevoFields').style.display = 'none';
+  setPedNuevoCliente(false);
 
   PED_ITEMS = p.items.map(it => ({ cod: it.cod, producto: it.producto, cantidad: it.cantidad, precioUnit: it.precioUnit }));
 
@@ -3378,7 +3396,7 @@ document.getElementById('pedNueva').addEventListener('click', () => {
   PED_EDITING_ORIGINAL = null;
   document.getElementById('pedVendedor').value = (function(){ try { return localStorage.getItem('huellas_vendedor') || ''; } catch (e) { return ''; } })();
   document.getElementById('pedClienteSelect').value = '';
-  document.getElementById('pedClienteNuevoFields').style.display = 'none';
+  setPedNuevoCliente(false);
   ['pedClienteNombre','pedClienteCelular','pedClienteDireccion'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pedCategoria').value = '';
   document.getElementById('pedProducto').innerHTML = '<option value="">Selecciona una categoría primero</option>';
@@ -3391,10 +3409,11 @@ document.getElementById('pedNueva').addEventListener('click', () => {
 
 document.getElementById('pedEnviar').addEventListener('click', async () => {
   const statusEl = document.getElementById('pedStatus');
+  statusEl.className = 'sub'; statusEl.style.fontWeight = '';
   const vendedor = document.getElementById('pedVendedor').value;
   if (!vendedor) { statusEl.textContent = 'Falta seleccionar el vendedor.'; return; }
 
-  const clienteSelVal = document.getElementById('pedClienteSelect').value;
+  const clienteSelVal = PED_NUEVO_CLIENTE ? '__nuevo__' : document.getElementById('pedClienteSelect').value;
   if (!clienteSelVal) { statusEl.textContent = 'Falta seleccionar o crear el cliente.'; return; }
 
   let clienteNombre, clienteCanal;
@@ -3440,7 +3459,8 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   if (!formaPagoEl) { statusEl.textContent = 'Falta seleccionar la forma de pago.'; return; }
   const formaPago = formaPagoEl.value;
   const observaciones = document.getElementById('pedObservaciones').value.trim();
-  const total = PED_ITEMS.reduce((s, it) => s + it.cantidad * it.precioUnit, 0);
+  PED_ITEMS.forEach(it => { it.cantidad = pedEntero(it.cantidad); it.precioUnit = pedPrecio(it.precioUnit); });
+  const total = pedTotalActual();
   const fechaInput = document.getElementById('pedFecha').value;
   if (!fechaInput) { statusEl.textContent = 'Falta la fecha del pedido.'; return; }
   if (MESES_CERRADOS.includes(fechaInput.slice(0, 7))) {
@@ -3579,7 +3599,7 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   PED_ITEMS = [];
   document.getElementById('pedVendedor').value = (function(){ try { return localStorage.getItem('huellas_vendedor') || ''; } catch (e) { return ''; } })();
   document.getElementById('pedClienteSelect').value = '';
-  document.getElementById('pedClienteNuevoFields').style.display = 'none';
+  setPedNuevoCliente(false);
   ['pedClienteNombre','pedClienteCelular','pedClienteDireccion'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pedCategoria').value = '';
   document.getElementById('pedProducto').innerHTML = '<option value="">Selecciona una categoría primero</option>';
@@ -3589,23 +3609,18 @@ document.getElementById('pedEnviar').addEventListener('click', async () => {
   document.getElementById('pedEditBanner').style.display = 'none';
   document.getElementById('pedNueva').style.display = 'none';
   renderPedido();
-  renderPedHistorial();
 
   statusEl.style.fontWeight = 'bold';
-  if (guardadoReal) {
-    statusEl.style.color = 'var(--jade-dark, #3F7364)';
-    statusEl.textContent = '✓ Pedido ' + (eraEdicion ? pedidoNum + ' corregido' : (pedidoCreadoNumero || pedidoNum) + ' guardado') + ' (' + fmtCOPc(total) + ') — quedó permanente en la base de datos.';
-  } else {
-    statusEl.style.color = 'var(--danger, #B24A3B)';
-    statusEl.textContent = '⚠ El pedido se calculó localmente pero NO se pudo confirmar el guardado permanente en la base de datos. Revisa tu conexión e inténtalo de nuevo.';
-  }
+  statusEl.className = 'sub ped-ok';
+  statusEl.style.color = 'var(--jade-dark, #3F7364)';
+  statusEl.textContent = '✓ Pedido ' + (eraEdicion ? pedidoNum + ' corregido' : (pedidoCreadoNumero || pedidoNum) + ' enviado') + ' correctamente.';
+  try { statusEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
 });
 
 try {
   refreshPedClienteSelect();
   refreshPedCategorias();
   renderPedido();
-  renderPedHistorial();
 } catch (e) { console.error('Error en solicitud de pedidos:', e); }
 
 // ---- Ventas: pedidos en vivo (desde Solicitud de pedidos) ----
@@ -4386,7 +4401,7 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
   const inp = document.getElementById('pedBuscar');
   const res = document.getElementById('pedBuscarRes');
   const norm = (t) => (t || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const etiqueta = (p) => (p.marca ? p.marca + ' — ' : '') + p.producto + ((p.present && !norm(p.producto).includes(norm(p.present))) ? ' (' + p.present + ')' : '');
+  const etiqueta = (p) => pedNombreProd(p) + (p.present ? ' · ' + p.present : '');
   function mostrarMensaje(txt) {
     res.innerHTML = '';
     const d = document.createElement('div'); d.className = 'ped-msg'; d.textContent = txt;
@@ -4394,8 +4409,8 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
   }
   function agregarDesdeBusqueda(p) {
     const ex = PED_ITEMS.find(i => i.cod === p.cod);
-    if (ex) ex.cantidad += 1;
-    else PED_ITEMS.push({ cod: p.cod, producto: etiqueta(p), cantidad: 1, precioUnit: p.precio || 0 });
+    if (ex) ex.cantidad = pedEntero(ex.cantidad) + 1;
+    else PED_ITEMS.push({ cod: p.cod, producto: pedNombreProd(p), present: p.present || '', cantidad: 1, precioUnit: p.precio || 0 });
     renderPedido();
     inp.value = '';
     mostrarMensaje('✓ Agregado: ' + etiqueta(p) + (ex ? ' (cantidad +1)' : ''));
@@ -4406,7 +4421,7 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
     const q = norm(inp.value).split(/\s+/).filter(Boolean);
     if (!q.length) { res.style.display = 'none'; res.innerHTML = ''; return; }
     const hits = LISTA_PRECIOS.filter(p => {
-      if (!p.cod) return false;
+      if (!esCodigoReal(p.cod)) return false;
       const h = norm([p.categoria, p.marca, p.producto, p.present, esCodigoReal(p.cod) ? p.cod : ''].join(' '));
       return q.every(t => h.includes(t));
     }).slice(0, 8);
@@ -4414,7 +4429,9 @@ document.getElementById('repDescargarExcel').addEventListener('click', () => {
     res.innerHTML = '';
     hits.forEach(p => {
       const b = document.createElement('button'); b.type = 'button';
-      const a = document.createElement('span'); a.textContent = etiqueta(p);
+      const a = document.createElement('span'); a.style.minWidth = '0';
+      const n1 = document.createElement('b'); n1.textContent = pedNombreProd(p); a.appendChild(n1);
+      if (p.present) { const n2 = document.createElement('div'); n2.style.cssText = 'font-size:0.8rem;color:var(--muted);margin-top:2px;'; n2.textContent = 'Presentación: ' + p.present; a.appendChild(n2); }
       const c = document.createElement('span'); c.className = 'pr'; c.textContent = fmtCOPc(p.precio);
       b.appendChild(a); b.appendChild(c);
       b.addEventListener('click', () => agregarDesdeBusqueda(p));
