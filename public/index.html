@@ -331,6 +331,18 @@
   .ped-cliente-row .ped-nuevo-btn { flex-shrink: 0; width: auto; margin: 0; padding: 8px 14px; white-space: nowrap; }
   #pedStatus { display: block; margin: 12px 0 0 !important; font-size: 0.95rem; line-height: 1.4; }
   .ped-ok { display: block; padding: 12px 14px; border-radius: 10px; background: rgba(63,115,100,0.14); }
+  .ca-wrap { display: flex; gap: 14px; flex-wrap: wrap; align-items: stretch; }
+  .ca-box { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 10px; min-width: 200px; background: var(--bg); }
+  .ca-box .ca-t { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); font-weight: 700; }
+  .ca-box .ca-row { display: flex; gap: 8px; align-items: stretch; }
+  .ca-box .ca-row input { width: 120px; min-width: 0; }
+  .ca-box .ca-row select { width: auto; min-width: 128px; flex: 1; }
+  .ca-btn { all: unset; cursor: pointer; box-sizing: border-box; text-align: center; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; }
+  .ca-btn.abonar { background: var(--jade); color: #fff; }
+  .ca-btn.total { border: 2px solid var(--jade); color: var(--jade-dark); background: transparent; }
+  .ca-box.total { border-color: var(--jade); }
+  .cartera-filtro { max-width: 320px; margin-bottom: 14px; }
+  .cartera-filtro label { display: block; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
   .ped-sticky { display: none; }
   .grid-eq { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 780px) { .grid-eq { grid-template-columns: 1fr; } }
@@ -401,6 +413,10 @@
     table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .lp-form-grid { grid-template-columns: 1fr; }
     .ped-cliente-row { flex-direction: column; }
+    .ca-wrap { flex-direction: column; width: 100%; }
+    .ca-box { width: 100%; }
+    .ca-box .ca-row input { width: auto; flex: 1; }
+    .cartera-filtro { max-width: none; }
     .ped-cliente-row .ped-nuevo-btn { width: 100%; }
     .card { padding: 14px; }
     .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -999,6 +1015,10 @@
         <div class="subpanel" id="sub-cartera">
 
           <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Muestra los clientes con crédito pendiente y el monto por cobrar.</li><li>Se alimenta de los pedidos enviados con forma de pago a crédito.</li></ul></details>
+          <div class="cartera-filtro">
+            <label for="carteraVendedor">Filtrar por vendedor</label>
+            <select id="carteraVendedor"><option value="">Todos los vendedores</option></select>
+          </div>
           <div class="kpi-grid" style="margin-bottom:16px;">
             <div class="kpi">
               <div class="label">Cuentas por cobrar</div>
@@ -1011,7 +1031,7 @@
           </div>
           <div class="card scrollx" style="margin-bottom:16px;">
             <div class="sub" id="carteraVacio">Todavía no hay pedidos a crédito. En cuanto un vendedor registre un pedido en Solicitud de pedidos con forma de pago a crédito, aparece aquí automáticamente.</div>
-            <table id="carteraTable" style="display:none;">
+            <table id="carteraTable" class="t-cards" style="display:none;">
               <thead><tr><th>Cliente</th><th>Vendedor</th><th>Tipo de crédito</th><th>Fecha</th><th class="num">Total</th><th class="num">Abonado</th><th class="num">Saldo</th><th></th></tr></thead>
               <tbody id="carteraBody"></tbody>
             </table>
@@ -2953,36 +2973,63 @@ let PED_EDITING_NUM = null;
 let PED_EDITING_ORIGINAL = null;
 let CARTERA = [];
 
+function carteraFiltrada() {
+  const sel = document.getElementById('carteraVendedor');
+  const v = sel ? sel.value : '';
+  return v ? CARTERA.filter(c => c.vendedor === v) : CARTERA;
+}
 function renderCartera() {
   const tbody = document.getElementById('carteraBody');
   const table = document.getElementById('carteraTable');
   const vacio = document.getElementById('carteraVacio');
   if (!tbody) return;
+  const selV = document.getElementById('carteraVendedor');
+  if (selV) {
+    const actual = selV.value;
+    const vendedores = [...new Set(CARTERA.map(c => c.vendedor))].sort((a, b) => a.localeCompare(b, 'es'));
+    selV.innerHTML = '<option value="">Todos los vendedores</option>' + vendedores.map(v => '<option value="' + v + '">' + v + '</option>').join('');
+    selV.value = vendedores.includes(actual) ? actual : '';
+  }
+  const lista = carteraFiltrada();
   tbody.innerHTML = '';
-  if (CARTERA.length === 0) { table.style.display = 'none'; vacio.style.display = 'block'; }
-  else {
+  if (lista.length === 0) {
+    table.style.display = 'none'; vacio.style.display = 'block';
+    vacio.textContent = CARTERA.length === 0 ? 'Todavía no hay pedidos a crédito. En cuanto un vendedor registre un pedido en Solicitud de pedidos con forma de pago a crédito, aparece aquí automáticamente.' : 'Este vendedor no tiene cartera pendiente.';
+  } else {
     table.style.display = ''; vacio.style.display = 'none';
-    [...CARTERA].reverse().forEach(c => {
+    [...lista].reverse().forEach(c => {
       const tr = document.createElement('tr');
       tr.dataset.pedidoNum = c.pedidoNum;
       const saldo = c.saldo != null ? c.saldo : c.total;
-      tr.innerHTML = `<td>${c.cliente}</td><td>${c.vendedor}</td><td>${c.tipoCredito}</td><td>${c.fecha}</td>
-        <td class="num">${fmtCOPc(c.total)}</td>
-        <td class="num">${fmtCOPc(c.abonado || 0)}</td>
-        <td class="num"><b>${fmtCOPc(saldo)}</b></td>
-        <td class="cartera-accion">
-          <input type="number" class="cartera-abono-input" placeholder="Valor a abonar" style="width:120px; display:inline-block;">
-          <select class="cartera-abono-medio" style="width:110px; display:inline-block;">
-            <option>Efectivo</option><option>Transferencia</option>
-          </select>
-          <button class="lp-remove-btn cartera-abonar-btn" data-num="${c.pedidoNum}" style="color:var(--jade-dark);">Abonar</button>
-          <button class="lp-remove-btn cartera-pagartotal-btn" data-num="${c.pedidoNum}" style="color:var(--jade-dark); margin-left:6px;">Pago total</button>
+      tr.innerHTML = `<td data-label="Cliente" class="prod">${c.cliente}</td><td data-label="Vendedor">${c.vendedor}</td><td data-label="Crédito">${c.tipoCredito}</td><td data-label="Fecha">${c.fecha}</td>
+        <td class="num" data-label="Total">${fmtCOPc(c.total)}</td>
+        <td class="num" data-label="Abonado">${fmtCOPc(c.abonado || 0)}</td>
+        <td class="num" data-label="Saldo"><b>${fmtCOPc(saldo)}</b></td>
+        <td class="cartera-accion acc">
+          <div class="ca-wrap">
+            <div class="ca-box">
+              <div class="ca-t">Abonar</div>
+              <div class="ca-row">
+                <input type="number" class="cartera-abono-input" placeholder="Valor a abonar" min="0">
+                <select class="cartera-abono-medio"><option>Efectivo</option><option>Transferencia</option></select>
+              </div>
+              <button class="ca-btn abonar cartera-abonar-btn" data-num="${c.pedidoNum}">Abonar</button>
+            </div>
+            <div class="ca-box total">
+              <div class="ca-t">Pagar saldo completo (${fmtCOPc(saldo)})</div>
+              <div class="ca-row">
+                <select class="cartera-total-medio"><option>Efectivo</option><option>Transferencia</option></select>
+              </div>
+              <button class="ca-btn total cartera-pagartotal-btn" data-num="${c.pedidoNum}">Pago total</button>
+            </div>
+          </div>
         </td>`;
       tbody.appendChild(tr);
     });
   }
-  document.getElementById('carteraTotal').textContent = fmtCOPc(CARTERA.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0));
-  document.getElementById('carteraCount').textContent = CARTERA.length;
+  const sumaLista = lista.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0);
+  document.getElementById('carteraTotal').textContent = fmtCOPc(sumaLista);
+  document.getElementById('carteraCount').textContent = lista.length;
 
   const kpiTotal = document.getElementById('kpiCarteraDash');
   if (kpiTotal) {
@@ -3003,7 +3050,7 @@ function renderCartera() {
   tbody.querySelectorAll('.cartera-pagartotal-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const tr = btn.closest('tr');
-      const medio = tr.querySelector('.cartera-abono-medio').value;
+      const medio = tr.querySelector('.cartera-total-medio').value;
       const c = CARTERA.find(x => x.pedidoNum === btn.dataset.num);
       if (!c) return;
       registrarAbonoCartera(btn.dataset.num, c.saldo != null ? c.saldo : c.total, medio);
@@ -3011,6 +3058,7 @@ function renderCartera() {
   });
 }
 try { renderCartera(); } catch (e) {}
+document.getElementById('carteraVendedor').addEventListener('change', () => renderCartera());
 
 async function sincronizarCarteraDesdeD1() {
   try {
@@ -3217,7 +3265,7 @@ document.getElementById('carteraDescargarPDF').addEventListener('click', async (
     y += 24;
 
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
-    CARTERA.forEach((c, i) => {
+    carteraFiltrada().forEach((c, i) => {
       const rowH = 22;
       if (y + rowH > 700) { doc.addPage(); y = 50; }
       if (i % 2 === 0) { doc.setFillColor(...LIGHTBG); doc.rect(margin, y, pageW - 2*margin, rowH, 'F'); }
@@ -3233,9 +3281,9 @@ document.getElementById('carteraDescargarPDF').addEventListener('click', async (
     y += 16;
     doc.setDrawColor(220,210,200); doc.line(margin, y, pageW - margin, y);
     y += 22;
-    const total = CARTERA.reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0);
+    const total = carteraFiltrada().reduce((s, c) => s + (c.saldo != null ? c.saldo : c.total), 0);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...JADE_DARK);
-    doc.text('Total cartera pendiente: ' + fmtCOPc(total), margin, y);
+    doc.text('Total cartera pendiente' + (document.getElementById('carteraVendedor').value ? ' — ' + document.getElementById('carteraVendedor').value : '') + ': ' + fmtCOPc(total), margin, y);
 
     y += 40;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...MUTED);
