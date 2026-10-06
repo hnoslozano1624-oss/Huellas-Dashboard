@@ -407,6 +407,22 @@ async function handleApi(request, env, url) {
     results.forEach(r => { r.saldo = r.total - r.abonado; });
     return json(results);
   }
+  const saldarMatch = path.match(/^pedidos\/(\d+)\/saldar-sin-caja$/);
+  if (saldarMatch && method === 'POST') {
+    // Marca un pedido a crédito como pagado SIN registrar ingreso en caja (se cobró antes y ya está en el saldo de caja)
+    const id = Number(saldarMatch[1]);
+    const ped = await env.DB.prepare(
+      `SELECT pe.total, pe.forma_pago, pe.estado_pago, COALESCE((SELECT SUM(monto) FROM abonos WHERE pedido_id = pe.id), 0) AS abonado FROM pedidos pe WHERE pe.id = ?`
+    ).bind(id).first();
+    if (!ped) return json({ error: 'El pedido no existe' }, 404);
+    if (ped.forma_pago === 'Efectivo' || ped.forma_pago === 'Transferencia') return json({ error: 'Solo los pedidos a crédito están en cartera' }, 400);
+    if (ped.estado_pago === 'pagado') return json({ error: 'El pedido ya está pagado' }, 409);
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS saldos_sin_caja (id INTEGER PRIMARY KEY AUTOINCREMENT, pedido_id INTEGER NOT NULL, saldo REAL NOT NULL, nota TEXT, fecha TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+    const b = await request.json().catch(() => ({}));
+    await env.DB.prepare('INSERT INTO saldos_sin_caja (pedido_id, saldo, nota) VALUES (?, ?, ?)').bind(id, ped.total - ped.abonado, b.nota || 'Cobrado antes; sin movimiento de caja').run();
+    await env.DB.prepare("UPDATE pedidos SET estado_pago = 'pagado' WHERE id = ?").bind(id).run();
+    return json({ ok: true, saldo_saldado: ped.total - ped.abonado });
+  }
   const abonosMatch = path.match(/^pedidos\/(\d+)\/abonos$/);
   if (abonosMatch && method === 'GET') {
     const { results } = await env.DB.prepare(
