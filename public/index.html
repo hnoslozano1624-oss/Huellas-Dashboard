@@ -1272,6 +1272,18 @@
           <div>Estos reportes se arman con los pedidos registrados en el sistema (desde agosto 2026) y el histórico de ventas cargado en el dashboard. Se puede descargar cualquier mes con ventas.</div>
         </div>
 
+        <div class="card" style="margin-bottom:16px;">
+          <h3>Comparativo de ventas año a año</h3>
+          <div class="sub" id="repCompSub"></div>
+          <div class="chart-box tall"><canvas id="chartRepComparativo"></canvas></div>
+          <div class="card scrollx" style="box-shadow:none; padding:0; margin-top:12px;">
+            <table>
+              <thead><tr><th>Mes</th><th class="num" id="repCompTh1">2025</th><th class="num" id="repCompTh2">2026</th><th class="num">Var.</th></tr></thead>
+              <tbody id="repCompBody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="card">
           <h3>Reporte ejecutivo (PDF)</h3>
           <div class="sub">Resultados del mes, comparativo contra el año anterior, ventas por línea y por canal, y estrategias sugeridas según el comportamiento del mes.</div>
@@ -1939,6 +1951,7 @@ function renderGraficasDashboard() {
   });
 
   dibujarBloquesMes();
+  try { if (typeof renderRepComparativo === 'function') renderRepComparativo(); } catch (e) {}
 }
 
 renderGraficasDashboard();
@@ -4542,6 +4555,60 @@ try {
   rf.max = hoyR.getFullYear() + '-' + String(hoyR.getMonth() + 1).padStart(2, '0');
   rf.value = mesPasadoISO();
 } catch (e) {}
+
+
+// Comparativo año a año en el panel de Reportes
+function renderRepComparativo() {
+  const cv = document.getElementById('chartRepComparativo'); if (!cv) return;
+  const filtro = (document.getElementById('repMesFiltro') || {}).value || '';
+  const anio = parseInt(filtro.split('-')[0], 10) || new Date().getFullYear();
+  const mesSel = parseInt(filtro.split('-')[1], 10) - 1;
+  const serie = (a) => DATA.meses.map((_, i) => { try { return datosMes(a, i).ventas || 0; } catch (e) { return 0; } });
+  const prev = serie(anio - 1), act = serie(anio);
+  document.getElementById('repCompSub').textContent = 'Ventas mensuales de ' + (anio - 1) + ' frente a ' + anio + '. El mes seleccionado aparece resaltado. *Acumulado de los meses con ventas en ambos años, hasta el mes elegido.';
+  document.getElementById('repCompTh1').textContent = anio - 1;
+  document.getElementById('repCompTh2').textContent = anio;
+  const tb = document.getElementById('repCompBody'); tb.innerHTML = '';
+  let sp = 0, sa = 0;
+  DATA.meses.forEach((m, i) => {
+    if (!prev[i] && !act[i]) return;
+    const ambos = prev[i] > 0 && act[i] > 0;
+    if (ambos && i <= mesSel) { sp += prev[i]; sa += act[i]; }
+    const v = ambos ? Math.round(((act[i] - prev[i]) / prev[i]) * 1000) / 10 : null;
+    const tr = document.createElement('tr');
+    if (i === mesSel) tr.style.background = 'rgba(92,158,138,0.14)';
+    tr.innerHTML = '<td>' + m + '</td><td class="num">' + (prev[i] ? fmtCOP(prev[i]) : '—') + '</td><td class="num">' + (act[i] ? fmtCOP(act[i]) : '—') + '</td><td class="num" style="color:' + (v === null ? 'inherit' : v >= 0 ? '#3F7364' : '#B24A3B') + '">' + (v === null ? '—' : (v >= 0 ? '+' : '') + String(v).replace('.', ',') + '%') + '</td>';
+    tb.appendChild(tr);
+  });
+  if (sp > 0) {
+    const v = Math.round(((sa - sp) / sp) * 1000) / 10;
+    const tr = document.createElement('tr'); tr.style.fontWeight = '700';
+    tr.innerHTML = '<td>Acumulado*</td><td class="num">' + fmtCOP(sp) + '</td><td class="num">' + fmtCOP(sa) + '</td><td class="num" style="color:' + (v >= 0 ? '#3F7364' : '#B24A3B') + '">' + (v >= 0 ? '+' : '') + String(v).replace('.', ',') + '%</td>';
+    tb.appendChild(tr);
+  }
+  const ex = Chart.getChart(cv); if (ex) ex.destroy();
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  new Chart(cv, {
+    type: 'line',
+    data: { labels: DATA.meses, datasets: [
+      { label: String(anio - 1), data: prev.map(v => v > 0 ? v : null), borderColor: '#E8A898', backgroundColor: 'rgba(232,168,152,0.15)', tension: 0.3, fill: true, pointRadius: 3 },
+      { label: String(anio), data: act.map(v => v > 0 ? v : null), borderColor: '#5C9E8A', backgroundColor: 'rgba(92,158,138,0.18)', tension: 0.3, fill: true, pointRadius: 3 }
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22, bottom: 16, right: 16, left: 14 } },
+      plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtCOP(c.parsed.y) } } },
+      scales: { y: { beginAtZero: true, grid: { color: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }, ticks: { callback: v => '$' + (v / 1000000).toFixed(1) + 'M' } }, x: { grid: { display: false } } }
+    },
+    plugins: [{ id: 'valoresRep', afterDatasetsDraw(chart) {
+      const c = chart.ctx, chico = chart.width < 520; c.save(); c.font = '600 ' + (chico ? 9 : 11) + 'px sans-serif'; c.textAlign = 'center';
+      chart.data.datasets.forEach((ds, di) => { const arriba = di === 1; c.fillStyle = arriba ? '#3F7364' : '#B5705F'; c.textBaseline = arriba ? 'bottom' : 'top';
+        chart.getDatasetMeta(di).data.forEach((pt, i) => { const v = ds.data[i]; if (!v) return; c.fillText('$' + (v / 1000000).toFixed(1).replace('.', ',') + 'M', pt.x, pt.y + (arriba ? -7 : 7)); }); });
+      c.restore(); } }]
+  });
+}
+try { document.getElementById('repMesFiltro').addEventListener('change', renderRepComparativo); } catch (e) {}
+try { document.querySelector('.nav-leaf[data-panel="reportes"]').addEventListener('click', () => setTimeout(renderRepComparativo, 50)); } catch (e) {}
+try { renderRepComparativo(); } catch (e) { console.error('Comparativo reportes:', e); }
 
 document.getElementById('repDescargarPdf').addEventListener('click', () => {
   const statusEl = document.getElementById('repPdfStatus');
