@@ -442,6 +442,38 @@ async function handleApi(request, env, url) {
     return json({ id: r.meta.last_row_id });
   }
 
+  // --- Cuadre único de caja: deja Efectivo y Bancos en cero al cierre de una fecha, sin borrar historial ---
+  if (path === 'caja/cuadre-cero' && (method === 'GET' || method === 'POST')) {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS cuadre_caja_unico (id INTEGER PRIMARY KEY CHECK (id = 1), fecha_corte TEXT NOT NULL, efectivo REAL NOT NULL, bancos REAL NOT NULL, aplicado TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+    const hecho = await env.DB.prepare('SELECT fecha_corte, efectivo, bancos, aplicado FROM cuadre_caja_unico WHERE id = 1').first();
+    let corte = '2026-09-30';
+    if (method === 'POST') { const b = await request.json().catch(() => ({})); if (b.corte) corte = String(b.corte); }
+    else corte = url.searchParams.get('corte') || corte;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(corte)) return json({ error: 'Fecha de corte inválida' }, 400);
+    // Hora de Colombia (UTC-5): el día termina a las 05:00 UTC del día siguiente
+    const sig = new Date(corte + 'T00:00:00Z'); sig.setUTCDate(sig.getUTCDate() + 1);
+    const limite = sig.toISOString().slice(0, 10) + ' 05:00:00';
+    const filas = await env.DB.prepare(
+      `SELECT CASE WHEN medio = 'Efectivo' THEN 'Efectivo' ELSE 'Bancos' END AS cuenta,
+              SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE -monto END) AS neto
+       FROM flujo_caja WHERE fecha < ? GROUP BY 1`
+    ).bind(limite).all();
+    const neto = { Efectivo: 0, Bancos: 0 };
+    (filas.results || []).forEach(f => { neto[f.cuenta] = f.neto || 0; });
+    if (method === 'GET') return json({ hecho: !!hecho, aplicado: hecho || null, corte, efectivo: neto.Efectivo, bancos: neto.Bancos });
+    if (hecho) return json({ error: 'El cuadre único ya se aplicó el ' + hecho.aplicado + '. No se puede repetir.' }, 409);
+    const fechaAjuste = sig.toISOString().slice(0, 10) + ' 04:59:59';
+    for (const cuenta of ['Efectivo', 'Bancos']) {
+      const n = neto[cuenta];
+      if (!n) continue;
+      await env.DB.prepare(
+        "INSERT INTO flujo_caja (fecha, tipo, categoria, monto, descripcion, medio) VALUES (?, ?, 'Ajuste de cuadre', ?, ?, ?)"
+      ).bind(fechaAjuste, n > 0 ? 'gasto' : 'ingreso', Math.abs(n), 'Ajuste de cuadre único — caja en ceros al ' + corte, cuenta).run();
+    }
+    await env.DB.prepare('INSERT INTO cuadre_caja_unico (id, fecha_corte, efectivo, bancos) VALUES (1, ?, ?, ?)').bind(corte, neto.Efectivo, neto.Bancos).run();
+    return json({ ok: true, corte, efectivo: neto.Efectivo, bancos: neto.Bancos });
+  }
+
   // --- Cierres de mes ---
   if (path === 'cierres' && method === 'GET') {
     const { results } = await env.DB.prepare('SELECT mes, fecha_cierre FROM cierres_mes ORDER BY mes DESC').all();

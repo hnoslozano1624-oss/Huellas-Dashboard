@@ -1140,16 +1140,16 @@
             <span id="cajaSaldoStatus" class="sub" style="margin-left:12px;"></span>
           </div>
 
-          <div class="card" style="margin-bottom:16px;">
-            <h3>Saldo inicial del mes</h3>
-            <div class="sub">Ajusta aquí cuánto hay en efectivo y cuánto en bancos al arrancar el mes.</div>
-            <div class="lp-form-grid" style="margin-top:10px;">
-              <div><label>Efectivo</label><input type="number" id="cajaSaldoEfectivoInput" placeholder="0"></div>
-              <div><label>Bancos</label><input type="number" id="cajaSaldoBancosInput" placeholder="0"></div>
-              <div style="display:flex; align-items:flex-end;">
-                <button id="cajaGuardarSaldo" class="lp-add-btn">Guardar saldo inicial</button>
-              </div>
+          <div class="card" style="margin-bottom:16px;" id="cuadreCard">
+            <h3>Cuadre único de caja</h3>
+            <div class="sub" style="margin-bottom:10px;">Se puede usar una sola vez. Deja Efectivo y Bancos en <b>$0</b> al cierre de la fecha elegida, mediante un movimiento de ajuste (no borra ningún registro). Después, con «Iniciar saldo de un nuevo periodo», ingresa el saldo real del 1 de octubre.</div>
+            <div class="lp-form-grid" style="max-width:520px;">
+              <div><label>Dejar en cero al cierre del</label><input type="date" id="cuadreFecha" value="2026-09-30"></div>
+              <div><label>Efectivo a ajustar</label><input type="text" id="cuadreEfectivo" readonly></div>
+              <div><label>Bancos a ajustar</label><input type="text" id="cuadreBancos" readonly></div>
             </div>
+            <button id="cuadreAplicar" class="lp-add-btn" style="margin-top:12px;">Aplicar cuadre único</button>
+            <span id="cuadreStatus" class="sub" style="margin-left:12px;"></span>
           </div>
 
           <div class="card" style="margin-bottom:16px;">
@@ -3118,15 +3118,37 @@ function renderCajaMovimientos() {
 }
 try { renderCajaMovimientos(); } catch (e) {}
 
-document.getElementById('cajaGuardarSaldo').addEventListener('click', () => {
-  const efectivo = parseFloat(document.getElementById('cajaSaldoEfectivoInput').value) || 0;
-  const bancos = parseFloat(document.getElementById('cajaSaldoBancosInput').value) || 0;
-  CAJA_EFECTIVO = efectivo;
-  CAJA_BANCOS = bancos;
-  renderCajaMovimientos();
-  document.getElementById('cajaSaldoEfectivoInput').value = '';
-  document.getElementById('cajaSaldoBancosInput').value = '';
+async function cargarCuadreUnico() {
+  const fe = document.getElementById('cuadreFecha'); if (!fe) return;
+  const st = document.getElementById('cuadreStatus'), btn = document.getElementById('cuadreAplicar');
+  try {
+    const r = await fetch('/api/caja/cuadre-cero?corte=' + encodeURIComponent(fe.value));
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    document.getElementById('cuadreEfectivo').value = fmtCOPc(d.efectivo);
+    document.getElementById('cuadreBancos').value = fmtCOPc(d.bancos);
+    if (d.hecho) {
+      fe.value = d.aplicado.fecha_corte; fe.disabled = true; btn.disabled = true;
+      document.getElementById('cuadreEfectivo').value = fmtCOPc(d.aplicado.efectivo);
+      document.getElementById('cuadreBancos').value = fmtCOPc(d.aplicado.bancos);
+      st.textContent = '✓ Cuadre ya aplicado (caja en ceros al ' + d.aplicado.fecha_corte + '). No se puede repetir.';
+    }
+  } catch (e) { st.textContent = 'No se pudo consultar el cuadre.'; }
+}
+document.getElementById('cuadreFecha').addEventListener('change', cargarCuadreUnico);
+document.getElementById('cuadreAplicar').addEventListener('click', async () => {
+  const st = document.getElementById('cuadreStatus'), fe = document.getElementById('cuadreFecha');
+  if (!fe.value) { st.textContent = 'Falta la fecha de corte.'; return; }
+  if (!confirm('Esto deja Efectivo y Bancos en $0 al cierre del ' + fe.value + ' y solo se puede hacer UNA vez. ¿Continuar?')) return;
+  try {
+    const r = await fetch('/api/caja/cuadre-cero', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ corte: fe.value }) });
+    const d = await r.json();
+    if (!r.ok) { st.textContent = '⚠ ' + (d.error || 'No se pudo aplicar.'); return; }
+    await recargarCaja();
+    await cargarCuadreUnico();
+  } catch (e) { st.textContent = '⚠ Sin conexión con el servidor.'; }
 });
+try { cargarCuadreUnico(); } catch (e) {}
 
 document.getElementById('gastoRegistrar').addEventListener('click', () => {
   const statusEl = document.getElementById('gastoStatus');
