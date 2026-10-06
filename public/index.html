@@ -1873,12 +1873,40 @@ function renderGraficasDashboard() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' } },
+      layout: { padding: { top: 22, bottom: 16, right: 16, left: 14 } },
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fmtCOPc(c.parsed.y) } }
+      },
       scales: {
         y: { grid: { color: gridColor }, ticks: { callback: v => '$' + (v/1000000).toFixed(1) + 'M' } },
         x: { grid: { display: false } }
       }
-    }
+    },
+    plugins: [{
+      id: 'valoresEnPuntos',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const chico = chart.width < 520;
+        ctx.save();
+        ctx.font = '600 ' + (chico ? 9 : 11) + 'px sans-serif';
+        ctx.textAlign = 'center';
+        chart.data.datasets.forEach((ds, di) => {
+          const meta = chart.getDatasetMeta(di);
+          if (meta.hidden) return;
+          const arriba = di === chart.data.datasets.length - 1;
+          ctx.fillStyle = arriba ? '#3F7364' : '#B5705F';
+          ctx.textBaseline = arriba ? 'bottom' : 'top';
+          meta.data.forEach((pt, i) => {
+            const v = ds.data[i];
+            if (!v || v <= 0) return;
+            const txt = '$' + (v / 1000000).toFixed(1).replace('.', ',') + 'M';
+            ctx.fillText(txt, pt.x, pt.y + (arriba ? -7 : 7));
+          });
+        });
+        ctx.restore();
+      }
+    }]
   });
 
   dibujarBloquesMes();
