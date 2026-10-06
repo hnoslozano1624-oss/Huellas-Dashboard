@@ -133,6 +133,11 @@ async function handleApi(request, env, url) {
   }
   if (path === 'clientes' && method === 'POST') {
     const b = await request.json();
+    // Evita duplicados (p. ej. por doble clic): si ya existe un cliente con el mismo nombre, se devuelve ese
+    const normN = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+    const { results: existentes } = await env.DB.prepare('SELECT id, nombre FROM clientes').all();
+    const dup = existentes.find(c => normN(c.nombre) === normN(b.nombre));
+    if (dup) return json({ id: dup.id, existente: true });
     const r = await env.DB.prepare(
       'INSERT INTO clientes (nombre, celular, direccion, canal) VALUES (?, ?, ?, ?)'
     ).bind(b.nombre, b.celular ?? null, b.direccion ?? null, b.canal ?? null).run();

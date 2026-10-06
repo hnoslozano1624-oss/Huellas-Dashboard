@@ -2627,6 +2627,12 @@ document.getElementById('crmAddCancel').addEventListener('click', () => {
   crmAddForm.style.display = 'none';
 });
 document.getElementById('crmAddSubmit').addEventListener('click', async () => {
+  const btnAdd = document.getElementById('crmAddSubmit');
+  if (btnAdd.disabled) return;
+  btnAdd.disabled = true;
+  try { await crmAgregarCliente(); } finally { btnAdd.disabled = false; }
+});
+async function crmAgregarCliente() {
   const nombre = document.getElementById('crmNewNombre').value.trim();
   if (!nombre) { alert('El nombre es obligatorio.'); return; }
   if (CRM_CLIENTES.some(c => normTxt(c.nombre) === normTxt(nombre))) { alert('Ya existe un cliente con ese nombre.'); return; }
@@ -2650,7 +2656,7 @@ document.getElementById('crmAddSubmit').addEventListener('click', async () => {
   document.getElementById('crmCanalFiltro').value = '';
   renderCrm();
   if (typeof refreshPedClienteSelect === 'function') refreshPedClienteSelect();
-});
+}
 
 try { renderCrm(); } catch (e) { console.error('Error en CRM:', e); }
 
