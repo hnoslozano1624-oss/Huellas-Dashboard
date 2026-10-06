@@ -79,6 +79,53 @@ async function handleApi(request, env, url) {
     return json({ ok: true, cantidad_disponible: fila ? fila.cantidad_disponible : null });
   }
 
+  // --- Lista de precios: competencia y productos solo de mercado (no tocan el inventario) ---
+  if (path === 'competencia' && method === 'GET') {
+    await asegurarEsquemaLista(env);
+    const { results } = await env.DB.prepare('SELECT * FROM competencia_productos').all();
+    return json(results);
+  }
+  const compMatch = path.match(/^competencia\/(\d+)$/);
+  if (compMatch && method === 'PUT') {
+    await asegurarEsquemaLista(env);
+    const b = await request.json();
+    await env.DB.prepare(
+      'INSERT OR REPLACE INTO competencia_productos (producto_id, marca, presentacion, laika, agrocampo, ceba, puppys) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(compMatch[1], b.marca ?? null, b.presentacion ?? null, b.laika ?? null, b.agrocampo ?? null, b.ceba ?? null, b.puppys ?? null).run();
+    return json({ ok: true });
+  }
+  if (path === 'lista-mercado' && method === 'GET') {
+    await asegurarEsquemaLista(env);
+    const { results } = await env.DB.prepare('SELECT * FROM lista_mercado ORDER BY categoria, producto').all();
+    return json(results);
+  }
+  if (path === 'lista-mercado' && method === 'POST') {
+    await asegurarEsquemaLista(env);
+    const b = await request.json();
+    if (!b.categoria || !b.producto) return json({ error: 'Categoría y producto son obligatorios' }, 400);
+    const r = await env.DB.prepare(
+      'INSERT INTO lista_mercado (categoria, marca, producto, presentacion, costo, precio, laika, agrocampo, ceba, puppys) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(b.categoria, b.marca ?? null, b.producto, b.presentacion ?? null, b.costo ?? null, b.precio ?? null, b.laika ?? null, b.agrocampo ?? null, b.ceba ?? null, b.puppys ?? null).run();
+    return json({ id: r.meta.last_row_id });
+  }
+  const mercMatch = path.match(/^lista-mercado\/(\d+)$/);
+  if (mercMatch && method === 'PATCH') {
+    await asegurarEsquemaLista(env);
+    const b = await request.json();
+    const permitidos = ['costo', 'precio', 'laika', 'agrocampo', 'ceba', 'puppys'];
+    const campos = [], valores = [];
+    permitidos.forEach(k => { if (k in b) { campos.push(k + ' = ?'); valores.push(b[k]); } });
+    if (!campos.length) return json({ error: 'Nada para actualizar' }, 400);
+    valores.push(mercMatch[1]);
+    await env.DB.prepare('UPDATE lista_mercado SET ' + campos.join(', ') + ' WHERE id = ?').bind(...valores).run();
+    return json({ ok: true });
+  }
+  if (mercMatch && method === 'DELETE') {
+    await asegurarEsquemaLista(env);
+    await env.DB.prepare('DELETE FROM lista_mercado WHERE id = ?').bind(mercMatch[1]).run();
+    return json({ ok: true });
+  }
+
   // --- Clientes ---
   if (path === 'clientes' && method === 'GET') {
     const { results } = await env.DB.prepare('SELECT * FROM clientes ORDER BY nombre').all();
@@ -261,13 +308,64 @@ async function handleApi(request, env, url) {
 
   // --- Órdenes de compra ---
   if (path === 'ordenes-compra' && method === 'GET') {
+    await asegurarEsquemaOc(env);
     const { results } = await env.DB.prepare(
-      `SELECT oc.id, oc.fecha, oc.proveedor, oc.producto_id, p.codigo, p.nombre AS producto,
-              oc.cantidad, oc.costo_unitario, oc.estado, oc.fecha_vencimiento
+      `SELECT oc.id, oc.fecha, oc.proveedor, oc.producto_id, p.codigo, p.nombre AS producto, p.categoria,
+              oc.cantidad, oc.costo_unitario, oc.estado, oc.fecha_vencimiento, oc.oc_numero, oc.cuenta_pago
        FROM ordenes_compra oc JOIN productos p ON p.id = oc.producto_id
-       ORDER BY oc.fecha DESC`
+       ORDER BY oc.fecha DESC, oc.id DESC`
     ).all();
     return json(results);
+  }
+  if (path === 'proveedores' && method === 'GET') {
+    await asegurarEsquemaOc(env);
+    const { results } = await env.DB.prepare(
+      `SELECT nombre, celular, direccion FROM proveedores
+       UNION SELECT DISTINCT proveedor, NULL, NULL FROM ordenes_compra WHERE proveedor IS NOT NULL AND proveedor NOT IN (SELECT nombre FROM proveedores)
+       ORDER BY 1`
+    ).all();
+    return json(results);
+  }
+  if (path === 'ordenes-compra/lote' && method === 'POST') {
+    await asegurarEsquemaOc(env);
+    const b = await request.json();
+    const items = (b.items || []).filter(it => it.producto_id && Number(it.cantidad) > 0);
+    if (!b.proveedor || !items.length) return json({ error: 'Proveedor y al menos un producto son obligatorios' }, 400);
+    const cuenta = b.cuenta_pago === 'Bancos' ? 'Bancos' : 'Efectivo';
+    let numero = b.oc_numero || null;
+    if (numero) {
+      // Edición: se devuelve al inventario lo que había entrado y se reemplazan las líneas
+      const { results: viejas } = await env.DB.prepare('SELECT id, producto_id, cantidad, estado, fecha FROM ordenes_compra WHERE oc_numero = ?').bind(numero).all();
+      if (!viejas.length) return json({ error: 'La orden no existe' }, 404);
+      for (const v of viejas) {
+        if (v.estado === 'recibida') {
+          await env.DB.prepare("UPDATE inventario SET cantidad_disponible = cantidad_disponible - ?, actualizado_en = datetime('now') WHERE producto_id = ?").bind(v.cantidad, v.producto_id).run();
+        }
+      }
+      await env.DB.prepare('DELETE FROM ordenes_compra WHERE oc_numero = ?').bind(numero).run();
+      await env.DB.prepare('DELETE FROM flujo_caja WHERE oc_numero = ?').bind(numero).run();
+      if (!b.fecha) b.fecha = viejas[0].fecha;
+    } else {
+      numero = await siguienteNumeroOc(env);
+    }
+    const fecha = b.fecha || new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await env.DB.prepare('INSERT OR IGNORE INTO proveedores (nombre, celular, direccion) VALUES (?, ?, ?)').bind(b.proveedor, b.celular ?? null, b.direccion ?? null).run();
+    let total = 0;
+    for (const it of items) {
+      const costo = Number(it.costo_unitario) || 0;
+      total += costo * Number(it.cantidad);
+      const r = await env.DB.prepare(
+        "INSERT INTO ordenes_compra (fecha, proveedor, producto_id, cantidad, costo_unitario, estado, fecha_vencimiento, oc_numero, cuenta_pago) VALUES (?, ?, ?, ?, ?, 'pendiente', ?, ?, ?)"
+      ).bind(fecha, b.proveedor, it.producto_id, it.cantidad, costo, it.fecha_vencimiento ?? null, numero, cuenta).run();
+      await env.DB.prepare("UPDATE ordenes_compra SET estado = 'recibida' WHERE id = ?").bind(r.meta.last_row_id).run();
+      if (costo > 0) await env.DB.prepare('UPDATE productos SET costo_unitario = ? WHERE id = ?').bind(costo, it.producto_id).run();
+    }
+    if (total > 0) {
+      await env.DB.prepare(
+        "INSERT INTO flujo_caja (fecha, tipo, categoria, monto, descripcion, medio, oc_numero) VALUES (?, 'gasto', ?, ?, ?, ?, ?)"
+      ).bind(fecha, cuenta, total, 'Compra a proveedor — ' + b.proveedor + ' (' + numero + ')', cuenta, numero).run();
+    }
+    return json({ oc_numero: numero, total });
   }
   if (path === 'ordenes-compra' && method === 'POST') {
     const b = await request.json();
@@ -408,4 +506,49 @@ async function asegurarTablaConsecutivos(env) {
 async function registrarEntrada(env, productoId, cantidad, nota) {
   await env.DB.prepare('CREATE TABLE IF NOT EXISTS entradas_inventario (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL DEFAULT (datetime(\'now\')), producto_id INTEGER NOT NULL, cantidad INTEGER NOT NULL, nota TEXT)').run();
   await env.DB.prepare('INSERT INTO entradas_inventario (producto_id, cantidad, nota) VALUES (?, ?, ?)').bind(productoId, cantidad, nota ?? null).run();
+}
+
+// ---- Esquema de órdenes de compra (agrupadas por número) ----
+let esquemaOcListo = false;
+async function asegurarEsquemaOc(env) {
+  if (esquemaOcListo) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS proveedores (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL UNIQUE, celular TEXT, direccion TEXT)').run();
+  for (const sql of [
+    'ALTER TABLE ordenes_compra ADD COLUMN oc_numero TEXT',
+    'ALTER TABLE ordenes_compra ADD COLUMN cuenta_pago TEXT',
+    'ALTER TABLE flujo_caja ADD COLUMN oc_numero TEXT'
+  ]) {
+    try { await env.DB.prepare(sql).run(); } catch (e) { /* la columna ya existe */ }
+  }
+  // Líneas antiguas sin número: se agrupan por proveedor y por cercanía en el tiempo (misma compra guardada de una vez)
+  const { results: sinNumero } = await env.DB.prepare('SELECT id, fecha, proveedor FROM ordenes_compra WHERE oc_numero IS NULL ORDER BY id').all();
+  if (sinNumero.length) {
+    let n = await ultimoNumeroOc(env);
+    let anterior = null, actual = null;
+    for (const l of sinNumero) {
+      const t = Date.parse(String(l.fecha).replace(' ', 'T') + 'Z');
+      if (!anterior || anterior.proveedor !== l.proveedor || (t - anterior.t) > 30000) { n += 1; actual = 'OC-' + String(n).padStart(4, '0'); }
+      await env.DB.prepare('UPDATE ordenes_compra SET oc_numero = ?, cuenta_pago = COALESCE(cuenta_pago, ?) WHERE id = ?').bind(actual, 'Efectivo', l.id).run();
+      anterior = { proveedor: l.proveedor, t };
+    }
+  }
+  esquemaOcListo = true;
+}
+async function ultimoNumeroOc(env) {
+  const { results } = await env.DB.prepare("SELECT oc_numero FROM ordenes_compra WHERE oc_numero LIKE 'OC-%'").all();
+  let max = 0;
+  results.forEach(r => { const n = parseInt(String(r.oc_numero).slice(3), 10); if (!isNaN(n) && n > max) max = n; });
+  return max;
+}
+async function siguienteNumeroOc(env) {
+  return 'OC-' + String((await ultimoNumeroOc(env)) + 1).padStart(4, '0');
+}
+
+// ---- Esquema de la lista de precios (competencia y productos solo de mercado) ----
+let esquemaListaListo = false;
+async function asegurarEsquemaLista(env) {
+  if (esquemaListaListo) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS competencia_productos (producto_id INTEGER PRIMARY KEY, marca TEXT, presentacion TEXT, laika REAL, agrocampo REAL, ceba REAL, puppys REAL)').run();
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS lista_mercado (id INTEGER PRIMARY KEY AUTOINCREMENT, categoria TEXT NOT NULL, marca TEXT, producto TEXT NOT NULL, presentacion TEXT, costo REAL, precio REAL, laika REAL, agrocampo REAL, ceba REAL, puppys REAL)').run();
+  esquemaListaListo = true;
 }

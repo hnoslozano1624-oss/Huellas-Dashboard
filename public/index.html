@@ -257,6 +257,7 @@
   .cot-brand-slogan { font-size: 0.8rem; color: var(--muted); font-style: italic; margin-top: 2px; }
   .cot-numero { font-size: 0.95rem; font-weight: bold; color: var(--jade-dark); }
   .cot-search-wrap { position: relative; margin-top: 10px; }
+  .cot-search-wrap > label { display: block; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
   .cot-search-wrap input {
     width: 100%; font-family: inherit; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--card-border);
     background: var(--bg); color: var(--ink); font-size: 0.88rem;
@@ -328,6 +329,9 @@
     table.t-cards td { border: 0 !important; padding: 4px 0 !important; display: flex; justify-content: space-between; align-items: baseline; gap: 14px; text-align: right; white-space: normal; }
     table.t-cards td::before { content: attr(data-label); color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: .03em; text-align: left; flex-shrink: 0; }
     table.t-cards td.prod { font-weight: 600; }
+    table.t-cards td input { width: 58%; max-width: 190px; text-align: right; }
+    .oc-card summary { padding: 12px; }
+    .oc-card .oc-total { margin-left: 0; flex-basis: 100%; }
     table.t-cards td.acc { justify-content: flex-end; gap: 8px; padding-top: 8px !important; }
     table.t-cards td.acc::before { content: none; }
     table.t-cards td:empty { display: none; }
@@ -335,6 +339,19 @@
     .lp-filters { flex-direction: column; align-items: stretch; }
     .lp-filters > * { width: 100%; max-width: none; }
   }
+  .oc-card { border: 1px solid var(--card-border, #e6dcd5); border-radius: 12px; background: var(--card-bg, #fff); margin-bottom: 10px; overflow: hidden; }
+  .oc-card summary { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; padding: 14px 16px; cursor: pointer; list-style: none; }
+  .oc-card summary::-webkit-details-marker { display: none; }
+  .oc-card summary::before { content: '▸'; color: var(--jade); }
+  .oc-card[open] summary::before { content: '▾'; }
+  .oc-card .oc-num { font-weight: 700; color: var(--jade-dark); }
+  .oc-card .oc-prov { font-weight: 600; flex: 1 1 140px; }
+  .oc-card .oc-fecha { color: var(--muted); font-size: 0.85rem; }
+  .oc-card .oc-total { font-weight: 700; margin-left: auto; }
+  .oc-detalle { padding: 4px 16px 16px; border-top: 1px solid var(--card-border, #e6dcd5); }
+  .oc-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+  .oc-meta span { display: block; font-size: 0.7rem; text-transform: uppercase; color: var(--muted); }
+  .oc-detalle table { margin-bottom: 12px; }
   .msg-vacio { padding: 36px 12px; text-align: center; color: var(--muted); font-size: 0.9rem; }
 
   @media (max-width: 860px) {
@@ -773,7 +790,7 @@
           <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ol><li>Agregue cada producto con su cantidad y valor.</li><li>La fecha de vencimiento es obligatoria en cada producto.</li><li>Al guardar, los productos entran al inventario. Si el valor es $0, solo se suma inventario y no se mueve la caja.</li></ol></details>
 
           <div class="card" style="margin-bottom:16px;">
-            <h3>1. Proveedor</h3>
+            <h3>1. Proveedor y fecha</h3>
             <div class="lp-form-grid">
               <div>
                 <label>Proveedor</label>
@@ -782,6 +799,7 @@
                   <option value="__nuevo__">+ Proveedor nuevo</option>
                 </select>
               </div>
+              <div><label>Fecha de la compra</label><input type="date" id="ocFecha"></div>
             </div>
             <div id="ocProveedorNuevoFields" class="lp-form-grid" style="margin-top:12px; display:none;">
               <div><label>Nombre</label><input type="text" id="ocProvNombre"></div>
@@ -792,13 +810,18 @@
 
           <div class="card" style="margin-bottom:16px;">
             <h3>2. Productos</h3>
-            <div class="sub">Busca por código (o por nombre si no tiene código) y agrega cantidad y valor de compra.</div>
-            <div class="cot-search-wrap">
-              <input type="text" id="ocProductoSearch" placeholder="Buscar por código (o por nombre)...">
+            <div class="sub">Elija la categoría y luego el producto: solo aparecen los productos codificados en el inventario. Al elegirlo se agrega a la orden; después ajuste cantidad, valor y vencimiento.</div>
+            <div class="lp-form-grid">
+              <div><label>Categoría</label><select id="ocCategoria"><option value="">Selecciona...</option></select></div>
+              <div><label>Producto</label><select id="ocProductoSel"><option value="">Selecciona una categoría primero</option></select></div>
+            </div>
+            <div class="cot-search-wrap" style="margin-top:12px;">
+              <label>O búsquelo por nombre o código</label>
+              <input type="text" id="ocProductoSearch" placeholder="Ej.: monello 15kg o HO083">
               <div id="ocResultados" class="cot-resultados"></div>
             </div>
 
-            <table id="ocTable" style="margin-top:16px;">
+            <table class="t-cards" id="ocTable" style="margin-top:16px;">
               <thead>
                 <tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Valor unitario</th><th>Vence</th><th class="num">Subtotal</th><th></th></tr>
               </thead>
@@ -822,24 +845,25 @@
           <div id="ocEditBanner" class="alert" style="display:none; margin-bottom:16px;">
             <div class="ico">✏️</div>
             <div><b id="ocEditBannerText">Editando una orden existente</b>
-            Al guardar, se actualiza esta misma orden — y se corrige el efecto que tuvo en costo e inventario.</div>
+            Al guardar, se corrige esta misma orden: el inventario, el costo y el flujo de caja quedan según los nuevos valores.</div>
           </div>
 
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <button id="ocGuardar" class="lp-add-btn">Guardar orden de compra</button>
-            <button id="ocNueva" class="lp-add-btn lp-add-cancel" style="display:none;">+ Nueva orden</button>
+            <button id="ocNueva" class="lp-add-btn lp-add-cancel" style="display:none;">Cancelar edición</button>
             <span id="ocStatus" class="sub"></span>
           </div>
 
           <section style="margin-top:26px;">
             <div class="section-title"><span class="dot"></span>Historial de órdenes de compra</div>
-            <div class="card scrollx">
-              <div class="sub" id="ocHistVacio">Todavía no has guardado ninguna orden de compra.</div>
-              <table id="ocHistTable" style="display:none;">
-                <thead><tr><th>N°</th><th>Proveedor</th><th>Fecha</th><th class="num">Total</th><th></th></tr></thead>
-                <tbody id="ocHistBody"></tbody>
-              </table>
+            <div class="card" style="margin-bottom:12px;">
+              <div class="lp-form-grid" style="max-width:220px;">
+                <div><label>Mes a revisar</label><input type="month" id="ocMesFiltro"></div>
+              </div>
+              <div class="sub" id="ocHistResumen" style="margin-top:10px;"></div>
             </div>
+            <div id="ocHistLista"></div>
+            <div class="card" id="ocHistVacio"><div class="sub">No hay órdenes de compra en este mes.</div></div>
           </section>
         </div>
 
@@ -862,7 +886,7 @@
 
         <div class="subpanel" id="sub-precios">
 
-          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Edite costo y precio directamente en la tabla.</li><li>Los productos sin código muestran el campo «Agregar código». El indicador «Último código HO asignado» le dice cuál sigue.</li></ul></details>
+          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Edite costo, precio y precios de la competencia directamente en la tabla.</li><li>La columna «Vs. mercado» le dice si su precio está por encima del mínimo de la competencia.</li><li>«+ Agregar producto» sirve para comparar marcas nuevas: no se vende ni entra al inventario.</li></ul></details>
 
           <div class="kpi-grid" style="margin-bottom:16px;">
             <div class="kpi">
@@ -870,47 +894,39 @@
               <div class="value" id="lpTotal">—</div>
             </div>
             <div class="kpi">
-              <div class="label">Con código (en inventario)</div>
+              <div class="label">Por encima del mínimo del mercado</div>
               <div class="value" id="lpConCodigo">—</div>
+              <div class="delta warn">revisar si conviene ajustar el precio</div>
             </div>
             <div class="kpi">
-              <div class="label">Sin código todavía</div>
+              <div class="label">Competitivos</div>
               <div class="value" id="lpSinCodigo">—</div>
-              <div class="delta warn">se pueden vender, aún no tienen base de inventario</div>
+              <div class="delta up">precio igual o menor al mínimo</div>
             </div>
             <div class="kpi">
-              <div class="label">Último código HO asignado</div>
-              <div class="value" id="lpUltimoCodigo" style="font-size:1.3rem;">—</div>
-              <div class="delta">el siguiente disponible</div>
+              <div class="label">Sin dato de competencia</div>
+              <div class="value" id="lpUltimoCodigo">—</div>
+              <div class="delta">falta cargar precios de la competencia</div>
             </div>
           </div>
 
-          <div class="card" style="margin-bottom:16px;">
-            <div class="sub" style="margin-bottom:10px;">Si ves un código que no empieza en "HO" (por ejemplo uno pegado por error de otro sistema), esto lo deja en blanco para que puedas asignarle uno propio.</div>
-            <button id="lpLimpiarNoHO" class="lp-add-btn">Limpiar códigos que no empiezan en HO</button>
-            <span id="lpLimpiarStatus" class="sub" style="margin-left:12px;"></span>
-          </div>
-
-          <div class="card" style="margin-bottom:16px;">
+                    <div class="card" style="margin-bottom:16px;">
             <div class="lp-filters">
               <input type="text" id="lpSearch" placeholder="Buscar por marca o producto...">
               <select id="lpCategoria"><option value="">Todas las categorías</option></select>
-              <label class="lp-check"><input type="checkbox" id="lpSoloSinCodigo"> Solo sin código</label>
-              <button id="lpAddToggle" class="lp-add-btn" style="display:none;">+ Agregar producto</button>
-              <span class="sub">Los productos nuevos se registran en Inventario → «+ Registrar entrada».</span>
+              <button id="lpAddToggle" class="lp-add-btn">+ Agregar producto</button>
             </div>
           </div>
 
           <div class="card" id="lpAddForm" style="margin-bottom:16px; display:none;">
             <h3>Nuevo producto</h3>
-            <div class="sub">Se agrega a esta base de la lista de precios. Categoría, marca y producto son obligatorios.</div>
+            <div class="sub">Sirve para comparar con el mercado: no tiene código ni afecta el inventario, las ventas ni las compras. Categoría, marca y producto son obligatorios.</div>
             <div class="lp-form-grid">
               <div>
                 <label>Categoría</label>
                 <input type="text" id="lpNewCategoria" list="lpCategoriasList" placeholder="Ej. Alimento perro">
                 <datalist id="lpCategoriasList"></datalist>
               </div>
-              <div><label>Código (opcional)</label><input type="text" id="lpNewCod" placeholder="Se puede dejar en blanco"></div>
               <div><label>Marca</label><input type="text" id="lpNewMarca"></div>
               <div><label>Producto</label><input type="text" id="lpNewProducto"></div>
               <div><label>Presentación</label><input type="text" id="lpNewPresent" placeholder="Ej. 3KG"></div>
@@ -928,11 +944,11 @@
           </div>
 
           <div class="card scrollx">
-            <div class="sub">Costo y precio cliente final son editables — haz clic sobre el valor para ajustarlo. Si un producto no tiene código, puedes asignárselo aquí: al hacerlo pasará automáticamente a la base del inventario.</div>
-            <table id="lpTable">
+            <div class="sub">Esta lista sirve para revisar el catálogo de los proveedores frente a la competencia y decidir si conviene ajustar el precio de venta. Haga clic en un valor para editarlo; los precios de la competencia quedan guardados. Los productos que agregue aquí son solo de referencia: no tienen código ni afectan el inventario.</div>
+            <table class="t-cards" id="lpTable">
               <thead>
                 <tr>
-                  <th>Categoría</th><th>Código</th><th>Marca</th><th>Producto</th><th>Present.</th>
+                  <th>Categoría</th><th>Marca</th><th>Producto</th><th>Present.</th>
                   <th class="num">Costo</th><th class="num th-precio-final">Precio cliente</th><th class="num">Margen</th>
                   <th class="num">Laika</th><th class="num">Agrocampo</th><th class="num">Ceba</th><th class="num">Puppys</th>
                   <th>Vs. mercado</th>
@@ -1834,16 +1850,24 @@ catsSet.forEach(c => {
   lpCatSelect.appendChild(opt);
 });
 
+function lpMargen(p) { return (p.precio && p.costo) ? Math.round((p.precio - p.costo) / p.precio * 1000) / 10 : null; }
+function lpBadge(p) {
+  if (p.comp_min != null && p.precio != null) {
+    return p.precio > p.comp_min
+      ? '<span class="lp-badge warn">+' + fmtCOPn(p.precio - p.comp_min) + ' sobre mínimo</span>'
+      : '<span class="lp-badge ok">Competitivo</span>';
+  }
+  return '<span class="lp-badge na">Sin dato</span>';
+}
+
 function renderLista() {
   const search = document.getElementById('lpSearch').value.trim().toLowerCase();
   const cat = document.getElementById('lpCategoria').value;
-  const soloSinCod = document.getElementById('lpSoloSinCodigo').checked;
 
   let rows = LISTA_PRECIOS.filter(p => {
     if (cat && p.categoria !== cat) return false;
-    if (soloSinCod && esCodigoReal(p.cod)) return false;
     if (search) {
-      const hay = (p.marca + ' ' + p.producto).toLowerCase();
+      const hay = ((p.marca || '') + ' ' + p.producto).toLowerCase();
       if (!hay.includes(search)) return false;
     }
     return true;
@@ -1853,82 +1877,68 @@ function renderLista() {
   tbody.innerHTML = '';
   rows.forEach((p, idx) => {
     const tr = document.createElement('tr');
-    if (!esCodigoReal(p.cod)) tr.classList.add('lp-row-nocod');
-
-    let vsMercado = '<span class="lp-badge na">Sin dato</span>';
-    if (p.comp_min != null && p.precio != null) {
-      if (p.precio > p.comp_min) {
-        vsMercado = '<span class="lp-badge warn">+' + fmtCOPn(p.precio - p.comp_min) + ' sobre mínimo</span>';
-      } else {
-        vsMercado = '<span class="lp-badge ok">Competitivo</span>';
-      }
-    }
-
-    const codField = esCodigoReal(p.cod)
-      ? p.cod
-      : '<input class="lp-edit-code" type="text" placeholder="Agregar código" data-idx="' + idx + '" data-field="cod">';
-
+    const mg = lpMargen(p);
+    const quitar = p.mid ? ' <button class="lp-remove-btn lp-quitar" data-idx="' + idx + '">Quitar</button>' : '';
     tr.innerHTML = `
-      <td>${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</td>
-      <td>${codField}</td>
-      <td>${p.marca}</td>
-      <td>${p.producto}</td>
-      <td>${p.present}</td>
-      <td class="num"><input class="lp-edit" type="number" value="${p.costo ?? ''}" data-idx="${idx}" data-field="costo"></td>
-      <td class="num"><input class="lp-edit lp-precio-final" type="number" value="${p.precio ?? ''}" data-idx="${idx}" data-field="precio"></td>
-      <td class="num">${p.margen != null ? p.margen + '%' : '—'}</td>
-      <td class="num"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.laika ?? ''}" data-idx="${idx}" data-field="laika"></td>
-      <td class="num"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.agrocampo ?? ''}" data-idx="${idx}" data-field="agrocampo"></td>
-      <td class="num"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.ceba ?? ''}" data-idx="${idx}" data-field="ceba"></td>
-      <td class="num"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.puppys ?? ''}" data-idx="${idx}" data-field="puppys"></td>
-      <td>${vsMercado}</td>
+      <td data-label="Categoría">${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</td>
+      <td data-label="Marca">${p.marca || ''}</td>
+      <td data-label="Producto" class="prod">${p.producto}</td>
+      <td data-label="Presentación">${p.present || ''}</td>
+      <td class="num" data-label="Costo"><input class="lp-edit" type="number" value="${p.costo ?? ''}" data-idx="${idx}" data-field="costo"></td>
+      <td class="num" data-label="Precio cliente"><input class="lp-edit lp-precio-final" type="number" value="${p.precio ?? ''}" data-idx="${idx}" data-field="precio"></td>
+      <td class="num lp-mg" data-label="Margen">${mg != null ? mg + '%' : '—'}</td>
+      <td class="num" data-label="Laika"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.laika ?? ''}" data-idx="${idx}" data-field="laika"></td>
+      <td class="num" data-label="Agrocampo"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.agrocampo ?? ''}" data-idx="${idx}" data-field="agrocampo"></td>
+      <td class="num" data-label="Ceba"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.ceba ?? ''}" data-idx="${idx}" data-field="ceba"></td>
+      <td class="num" data-label="Puppys"><input class="lp-edit lp-comp" type="number" placeholder="—" value="${p.puppys ?? ''}" data-idx="${idx}" data-field="puppys"></td>
+      <td class="lp-vs" data-label="Vs. mercado">${lpBadge(p)}${quitar}</td>
     `;
     tbody.appendChild(tr);
   });
+
+  tbody.querySelectorAll('.lp-quitar').forEach(btn => btn.addEventListener('click', async () => {
+    const product = rows[parseInt(btn.dataset.idx)];
+    if (!confirm('¿Quitar «' + product.producto + '» de la lista de precios?')) return;
+    try {
+      const r = await fetch('/api/lista-mercado/' + product.mid, { method: 'DELETE' });
+      if (!r.ok) throw new Error('http ' + r.status);
+      LISTA_PRECIOS.splice(LISTA_PRECIOS.indexOf(product), 1);
+      renderLista();
+    } catch (e) { alert('No se pudo quitar el producto. Revise su conexión.'); }
+  }));
 
   tbody.querySelectorAll('input').forEach(inp => {
     inp.addEventListener('change', async (e) => {
       const product = rows[parseInt(e.target.dataset.idx)];
       const field = e.target.dataset.field;
-      const codigoAnterior = product.cod;
-      product[field] = field === 'cod' ? e.target.value.trim().toUpperCase() : (parseFloat(e.target.value) || null);
-      if (field === 'cod' && product[field]) {
-        e.target.outerHTML = product[field] + ' <span class="lp-badge ok">✓ a inventario</span>';
-        if (typeof refreshPedCategorias === 'function') refreshPedCategorias();
-      }
-      if (['laika','agrocampo','ceba','puppys','precio'].includes(field)) {
+      product[field] = parseFloat(e.target.value) || null;
+      const tr = e.target.closest('tr');
+      if (['laika', 'agrocampo', 'ceba', 'puppys'].includes(field)) {
         const comps = [product.laika, product.agrocampo, product.ceba, product.puppys].filter(v => v != null);
         product.comp_min = comps.length ? Math.min(...comps) : null;
-        const badgeCell = e.target.closest('tr').querySelector('td:last-child');
-        if (product.comp_min != null && product.precio != null) {
-          badgeCell.innerHTML = product.precio > product.comp_min
-            ? '<span class="lp-badge warn">+' + fmtCOPn(product.precio - product.comp_min) + ' sobre mínimo</span>'
-            : '<span class="lp-badge ok">Competitivo</span>';
-        } else {
-          badgeCell.innerHTML = '<span class="lp-badge na">Sin dato</span>';
-        }
       }
+      product.margen = lpMargen(product);
+      tr.querySelector('.lp-mg').textContent = product.margen != null ? product.margen + '%' : '—';
+      tr.querySelector('.lp-vs').firstElementChild.outerHTML = lpBadge(product);
       updateLpSummary();
 
-      // Guardar el cambio en la base de datos real (código, costo o precio)
-      if (['cod','costo','precio'].includes(field)) {
-        const dbId = DB_PRODUCTO_ID[codigoAnterior];
-        if (dbId) {
-          const body = {};
-          if (field === 'cod') body.codigo = product.cod;
-          if (field === 'costo') body.costo_unitario = product.costo;
-          if (field === 'precio') body.precio_unitario = product.precio;
-          try {
-            await fetch('/api/productos/' + dbId, {
-              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-            });
-            if (field === 'cod') {
-              delete DB_PRODUCTO_ID[codigoAnterior];
-              DB_PRODUCTO_ID[product.cod] = dbId;
-            }
-          } catch (err) { console.error('No se pudo guardar el cambio en la base de datos real:', err); }
+      // Guardar en la base de datos
+      try {
+        if (product.mid) {
+          const body = {}; body[field] = product[field];
+          await fetch('/api/lista-mercado/' + product.mid, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        } else {
+          const dbId = DB_PRODUCTO_ID[product.cod];
+          if (!dbId) return;
+          if (field === 'costo' || field === 'precio') {
+            const body = field === 'costo' ? { costo_unitario: product.costo } : { precio_unitario: product.precio };
+            await fetch('/api/productos/' + dbId, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          } else {
+            await fetch('/api/competencia/' + dbId, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ marca: product.marca || null, presentacion: product.present || null, laika: product.laika, agrocampo: product.agrocampo, ceba: product.ceba, puppys: product.puppys }) });
+          }
         }
-      }
+      } catch (err) { console.error('No se pudo guardar el cambio en la base de datos real:', err); }
     });
   });
 
@@ -1937,44 +1947,14 @@ function renderLista() {
 
 function updateLpSummary() {
   document.getElementById('lpTotal').textContent = LISTA_PRECIOS.length;
-  document.getElementById('lpConCodigo').textContent = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod)).length;
-  document.getElementById('lpSinCodigo').textContent = LISTA_PRECIOS.filter(p => !esCodigoReal(p.cod)).length;
-
-  const codigosHO = LISTA_PRECIOS
-    .map(p => p.cod)
-    .filter(c => c && /^HO\d+/.test(c))
-    .map(c => parseInt(c.match(/^HO(\d+)/)[1], 10));
-  const ultimoNum = codigosHO.length ? Math.max(...codigosHO) : 0;
-  document.getElementById('lpUltimoCodigo').textContent = ultimoNum ? 'HO' + String(ultimoNum).padStart(3, '0') : '—';
-  document.getElementById('lpUltimoCodigo').nextElementSibling.textContent = ultimoNum ? ('el siguiente disponible es HO' + String(ultimoNum + 1).padStart(3, '0')) : '';
+  const conDato = LISTA_PRECIOS.filter(p => p.comp_min != null && p.precio != null);
+  const sobre = conDato.filter(p => p.precio > p.comp_min).length;
+  document.getElementById('lpConCodigo').textContent = sobre;
+  document.getElementById('lpSinCodigo').textContent = conDato.length - sobre;
+  document.getElementById('lpUltimoCodigo').textContent = LISTA_PRECIOS.length - conDato.length;
 
   updateInventarioSummary();
 }
-
-document.getElementById('lpLimpiarNoHO').addEventListener('click', async () => {
-  const statusEl = document.getElementById('lpLimpiarStatus');
-  const aLimpiar = LISTA_PRECIOS.filter(p => p.cod && !/^HO/.test(p.cod));
-  if (aLimpiar.length === 0) { statusEl.textContent = 'No hay códigos fuera del formato HO — todo en orden.'; return; }
-  if (!confirm('Se van a dejar en blanco ' + aLimpiar.length + ' código(s) que no empiezan en "HO". ¿Continuar?')) return;
-  statusEl.textContent = 'Limpiando...';
-  let ok = 0, fail = 0;
-  for (const p of aLimpiar) {
-    const codigoAnterior = p.cod;
-    const dbId = DB_PRODUCTO_ID[codigoAnterior];
-    p.cod = null;
-    if (dbId) {
-      try {
-        const r = await fetch('/api/productos/' + dbId, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ codigo: null })
-        });
-        if (r.ok) { delete DB_PRODUCTO_ID[codigoAnterior]; ok++; } else { fail++; }
-      } catch (e) { fail++; }
-    }
-  }
-  try { renderLista(); } catch (e) {}
-  statusEl.textContent = ok + ' código(s) limpiados en la base de datos real.' + (fail ? (' ' + fail + ' no se pudieron actualizar.') : '');
-});
 
 function renderInventarioDisponibles() {
   const search = (document.getElementById('invSearch').value || '').trim().toLowerCase();
@@ -2084,7 +2064,6 @@ function renderInventarioBase() {
 
 document.getElementById('lpSearch').addEventListener('input', renderLista);
 document.getElementById('lpCategoria').addEventListener('change', renderLista);
-document.getElementById('lpSoloSinCodigo').addEventListener('change', renderLista);
 try {
   renderLista();
   updateInventarioSummary();
@@ -2100,22 +2079,7 @@ function siguienteCodigoHO() {
   return 'HO' + String(max + 1).padStart(3, '0');
 }
 async function recargarProductosYStock() {
-  const rp = await fetch('/api/productos');
-  if (rp.ok) {
-    const productos = await rp.json();
-    if (Array.isArray(productos) && productos.length > 0) {
-      LISTA_PRECIOS.length = 0;
-      productos.forEach(p => {
-        const cod = p.codigo || ('ID' + p.id);
-        DB_PRODUCTO_ID[cod] = p.id;
-        LISTA_PRECIOS.push({
-          categoria: p.categoria, cod: cod, marca: '', producto: p.nombre, present: '',
-          costo: p.costo_unitario, precio: p.precio_unitario, margen: null,
-          laika: null, agrocampo: null, ceba: null, puppys: null, comp_min: null
-        });
-      });
-    }
-  }
+  await cargarListaDesdeDB();
   const ri = await fetch('/api/inventario');
   if (ri.ok) {
     const inv = await ri.json();
@@ -2124,6 +2088,7 @@ async function recargarProductosYStock() {
   try { renderLista(); } catch (e) {}
   try { updateInventarioSummary(); } catch (e) {}
   try { refreshPedCategorias(); } catch (e) {}
+  try { refreshOcCategorias(); } catch (e) {}
 }
 function prepararFormEntrada() {
   const cats = document.getElementById('invCategoriasList'); cats.innerHTML = '';
@@ -2211,7 +2176,7 @@ document.getElementById('lpAddCancel').addEventListener('click', () => {
   lpAddForm.style.display = 'none';
 });
 
-document.getElementById('lpAddSubmit').addEventListener('click', () => {
+document.getElementById('lpAddSubmit').addEventListener('click', async () => {
   const categoria = document.getElementById('lpNewCategoria').value.trim().toUpperCase();
   const marca = document.getElementById('lpNewMarca').value.trim();
   const producto = document.getElementById('lpNewProducto').value.trim();
@@ -2220,38 +2185,32 @@ document.getElementById('lpAddSubmit').addEventListener('click', () => {
     return;
   }
   const num = (id) => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
-
   const nuevo = {
-    categoria: categoria,
-    cod: document.getElementById('lpNewCod').value.trim().toUpperCase(),
-    marca: marca,
-    producto: producto,
+    categoria: categoria, marca: marca, producto: producto,
     present: document.getElementById('lpNewPresent').value.trim(),
-    costo: num('lpNewCosto'),
-    precio: num('lpNewPrecio'),
-    laika: num('lpNewLaika'),
-    agrocampo: num('lpNewAgrocampo'),
-    ceba: num('lpNewCeba'),
-    puppys: num('lpNewPuppys'),
-    margen: null,
-    comp_min: null
+    costo: num('lpNewCosto'), precio: num('lpNewPrecio'),
+    laika: num('lpNewLaika'), agrocampo: num('lpNewAgrocampo'), ceba: num('lpNewCeba'), puppys: num('lpNewPuppys'),
+    margen: null, comp_min: null
   };
-  if (nuevo.precio && nuevo.costo) nuevo.margen = Math.round((nuevo.precio - nuevo.costo) / nuevo.precio * 1000) / 10;
+  try {
+    const r = await fetch('/api/lista-mercado', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categoria: nuevo.categoria, marca: nuevo.marca, producto: nuevo.producto, presentacion: nuevo.present, costo: nuevo.costo, precio: nuevo.precio, laika: nuevo.laika, agrocampo: nuevo.agrocampo, ceba: nuevo.ceba, puppys: nuevo.puppys }) });
+    if (!r.ok) throw new Error('http ' + r.status);
+    nuevo.mid = (await r.json()).id;
+  } catch (e) { alert('No se pudo guardar el producto. Revise su conexión e intente de nuevo.'); return; }
+  nuevo.cod = LP_COD_MERCADO(nuevo.mid);
+  nuevo.margen = lpMargen(nuevo);
   const compVals = [nuevo.laika, nuevo.agrocampo, nuevo.ceba, nuevo.puppys].filter(v => v != null);
   if (compVals.length) nuevo.comp_min = Math.min(...compVals);
-
   LISTA_PRECIOS.unshift(nuevo);
 
-  ['lpNewCategoria','lpNewCod','lpNewMarca','lpNewProducto','lpNewPresent','lpNewCosto','lpNewPrecio','lpNewLaika','lpNewAgrocampo','lpNewCeba','lpNewPuppys'].forEach(id => {
+  ['lpNewCategoria','lpNewMarca','lpNewProducto','lpNewPresent','lpNewCosto','lpNewPrecio','lpNewLaika','lpNewAgrocampo','lpNewCeba','lpNewPuppys'].forEach(id => {
     document.getElementById(id).value = '';
   });
   lpAddForm.style.display = 'none';
-
   document.getElementById('lpSearch').value = '';
   document.getElementById('lpCategoria').value = '';
-  document.getElementById('lpSoloSinCodigo').checked = false;
   renderLista();
-  if (typeof refreshPedCategorias === 'function') refreshPedCategorias();
 });
 
 // ---- CRM ----
@@ -2263,6 +2222,29 @@ let DB_CONECTADO = { productos: false, clientes: false, usuarios: false };
 let MESES_CERRADOS = [];
 
 function esCodigoReal(c) { return !!c && !/^ID\d+$/.test(c); }
+
+async function recargarCaja() {
+  try {
+    const r6 = await fetch('/api/flujo-caja');
+    if (r6.ok) {
+      const mov = await r6.json();
+      FLUJO_CAJA_MOVIMIENTOS.length = 0;
+      CAJA_EFECTIVO = 0; CAJA_BANCOS = 0;
+      mov.slice().reverse().forEach(m => {
+        const cuenta = m.medio === 'Efectivo' ? 'Efectivo' : 'Bancos';
+        const tipo = m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto';
+        const valor = m.monto;
+        if (cuenta === 'Efectivo') CAJA_EFECTIVO += (tipo === 'Ingreso' ? valor : -valor);
+        else CAJA_BANCOS += (tipo === 'Ingreso' ? valor : -valor);
+        FLUJO_CAJA_MOVIMIENTOS.push({
+          fecha: new Date((m.fecha || '').replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
+          concepto: m.descripcion, cuenta: cuenta, tipo: tipo, valor: valor
+        });
+      });
+      try { renderCajaMovimientos(); } catch (e) {}
+    }
+  } catch (e) { console.error('No se pudo cargar el flujo de caja real:', e); }
+}
 
 function mapPedidoDb(p) {
   const fechaRaw = new Date((p.fecha || '').replace(' ', 'T') + 'Z');
@@ -2278,26 +2260,57 @@ function mapPedidoDb(p) {
   };
 }
 
+const LP_BASE_ESTATICA = {};
+LISTA_PRECIOS.forEach(p => { if (p.cod) LP_BASE_ESTATICA[p.cod] = p; });
+const LP_COD_MERCADO = (id) => 'ID9' + String(id).padStart(6, '0'); // sintético: nunca cuenta como código real
+
+function lpTokens(t) { return new Set(normTxt(t).split(' ').filter(Boolean)); }
+function lpNombresParecidos(a, b) {
+  const x = lpTokens(a), y = lpTokens(b);
+  let inter = 0; x.forEach(t => { if (y.has(t)) inter++; });
+  return inter / Math.max(1, new Set([...x, ...y]).size) >= 0.5;
+}
+
+async function cargarListaDesdeDB() {
+  let productos = [], competencia = [], mercado = [];
+  try { const r = await fetch('/api/productos'); if (r.ok) productos = await r.json(); } catch (e) { console.error('No se pudo cargar el catálogo real:', e); }
+  try { const r = await fetch('/api/competencia'); if (r.ok) competencia = await r.json(); } catch (e) {}
+  try { const r = await fetch('/api/lista-mercado'); if (r.ok) mercado = await r.json(); } catch (e) {}
+  if (!Array.isArray(productos) || productos.length === 0) return false;
+  const comp = {}; (competencia || []).forEach(c => { comp[c.producto_id] = c; });
+  LISTA_PRECIOS.length = 0;
+  productos.forEach(p => {
+    const cod = p.codigo || ('ID' + p.id);
+    DB_PRODUCTO_ID[cod] = p.id;
+    const est = p.codigo ? LP_BASE_ESTATICA[p.codigo] : null;
+    const base = (est && lpNombresParecidos(p.nombre, (est.marca || '') + ' ' + est.producto)) ? est : null;
+    const c = comp[p.id] || null;
+    const src = c ? { marca: c.marca, present: c.presentacion, laika: c.laika, agrocampo: c.agrocampo, ceba: c.ceba, puppys: c.puppys }
+      : (base ? { marca: base.marca, present: base.present, laika: base.laika, agrocampo: base.agrocampo, ceba: base.ceba, puppys: base.puppys } : {});
+    const item = {
+      categoria: p.categoria, cod: cod, marca: src.marca || '', producto: p.nombre, present: src.present || '',
+      costo: p.costo_unitario, precio: p.precio_unitario || null, margen: null,
+      laika: src.laika ?? null, agrocampo: src.agrocampo ?? null, ceba: src.ceba ?? null, puppys: src.puppys ?? null, comp_min: null
+    };
+    LISTA_PRECIOS.push(item);
+  });
+  (mercado || []).forEach(m => {
+    LISTA_PRECIOS.push({
+      mid: m.id, categoria: m.categoria, cod: LP_COD_MERCADO(m.id), marca: m.marca || '', producto: m.producto, present: m.presentacion || '',
+      costo: m.costo, precio: m.precio, margen: null, laika: m.laika, agrocampo: m.agrocampo, ceba: m.ceba, puppys: m.puppys, comp_min: null
+    });
+  });
+  LISTA_PRECIOS.forEach(it => {
+    const v = [it.laika, it.agrocampo, it.ceba, it.puppys].filter(x => x != null);
+    it.comp_min = v.length ? Math.min(...v) : null;
+    it.margen = lpMargen(it);
+  });
+  return true;
+}
+
 async function cargarDatosReales() {
-  try {
-    const r = await fetch('/api/productos');
-    if (r.ok) {
-      const productos = await r.json();
-      if (Array.isArray(productos) && productos.length > 0) {
-        LISTA_PRECIOS.length = 0;
-        productos.forEach(p => {
-          const cod = p.codigo || ('ID' + p.id);
-          DB_PRODUCTO_ID[cod] = p.id;
-          LISTA_PRECIOS.push({
-            categoria: p.categoria, cod: cod, marca: '', producto: p.nombre, present: '',
-            costo: p.costo_unitario, precio: p.precio_unitario, margen: null,
-            laika: null, agrocampo: null, ceba: null, puppys: null, comp_min: null
-          });
-        });
-        DB_CONECTADO.productos = true;
-      }
-    }
-  } catch (e) { console.error('No se pudo cargar el catálogo real:', e); }
+  try { if (await cargarListaDesdeDB()) DB_CONECTADO.productos = true; } catch (e) { console.error('No se pudo cargar el catálogo real:', e); }
+  try { refreshOcCategorias(); } catch (e) {}
 
   try {
     const r2 = await fetch('/api/clientes');
@@ -2344,24 +2357,7 @@ async function cargarDatosReales() {
   } catch (e) { console.error('No se pudo cargar el historial real de pedidos:', e); }
 
   try {
-    const r6 = await fetch('/api/flujo-caja');
-    if (r6.ok) {
-      const mov = await r6.json();
-      FLUJO_CAJA_MOVIMIENTOS.length = 0;
-      CAJA_EFECTIVO = 0; CAJA_BANCOS = 0;
-      mov.slice().reverse().forEach(m => {
-        const cuenta = m.medio === 'Efectivo' ? 'Efectivo' : 'Bancos';
-        const tipo = m.tipo === 'ingreso' ? 'Ingreso' : 'Gasto';
-        const valor = m.monto;
-        if (cuenta === 'Efectivo') CAJA_EFECTIVO += (tipo === 'Ingreso' ? valor : -valor);
-        else CAJA_BANCOS += (tipo === 'Ingreso' ? valor : -valor);
-        FLUJO_CAJA_MOVIMIENTOS.push({
-          fecha: new Date((m.fecha || '').replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }),
-          concepto: m.descripcion, cuenta: cuenta, tipo: tipo, valor: valor
-        });
-      });
-      try { renderCajaMovimientos(); } catch (e) {}
-    }
+    await recargarCaja();
   } catch (e) { console.error('No se pudo cargar el flujo de caja real:', e); }
 
   try {
@@ -2589,7 +2585,7 @@ cotSearchInput.addEventListener('input', () => {
   const q = cotSearchInput.value.trim().toLowerCase();
   if (q.length < 1) { cotResultadosBox.classList.remove('show'); cotResultadosBox.innerHTML = ''; return; }
 
-  const porCodigo = LISTA_PRECIOS.filter(p => p.cod && p.cod.toLowerCase().includes(q));
+  const porCodigo = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod) && p.cod.toLowerCase().includes(q));
   const porNombre = q.length >= 2
     ? LISTA_PRECIOS.filter(p => !(p.cod && p.cod.toLowerCase().includes(q)) && (p.marca + ' ' + p.producto).toLowerCase().includes(q))
     : [];
@@ -3245,7 +3241,7 @@ document.getElementById('pedClienteCelular').addEventListener('input', (e) => {
 
 function refreshPedCategorias() {
   const sel = document.getElementById('pedCategoria');
-  const inventarioBase = LISTA_PRECIOS.filter(p => p.cod);
+  const inventarioBase = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod));
   const cats = [...new Set(inventarioBase.map(p => p.categoria))].sort();
   const current = sel.value;
   sel.innerHTML = '<option value="">Selecciona...</option>';
@@ -3262,7 +3258,7 @@ document.getElementById('pedCategoria').addEventListener('change', () => {
   const cat = document.getElementById('pedCategoria').value;
   const prodSel = document.getElementById('pedProducto');
   if (!cat) { prodSel.innerHTML = '<option value="">Selecciona una categoría primero</option>'; return; }
-  const productos = LISTA_PRECIOS.filter(p => p.cod && p.categoria === cat);
+  const productos = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod) && p.categoria === cat);
   prodSel.innerHTML = '<option value="">Selecciona...</option>';
   productos.forEach(p => {
     const opt = document.createElement('option');
@@ -3898,11 +3894,11 @@ document.getElementById('ventasDescargarSemana').addEventListener('click', async
 let PROVEEDORES = [];
 let OC_ITEMS = [];
 let OC_HISTORIAL = [];
-let OC_COUNTER = 1;
 let OC_EDITING_NUM = null;
-let OC_EDITING_ORIGINAL_ITEMS = null;
-let OC_EDITING_ORIGINAL_CUENTA = null;
-let OC_EDITING_ORIGINAL_TOTAL = 0;
+
+function ocIsoHoy(d) { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function ocFechaDB(s) { return new Date(String(s || '').replace(' ', 'T') + 'Z'); }
+function ocFechaCorta(d) { return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }); }
 
 function refreshOcProveedorSelect() {
   const sel = document.getElementById('ocProveedorSelect');
@@ -3917,6 +3913,39 @@ function refreshOcProveedorSelect() {
   if (current && [...sel.options].some(o => o.value === current)) sel.value = current;
 }
 
+function refreshOcCategorias() {
+  const sel = document.getElementById('ocCategoria');
+  const actual = sel.value;
+  const cats = [...new Set(LISTA_PRECIOS.filter(p => esCodigoReal(p.cod)).map(p => p.categoria))].sort();
+  sel.innerHTML = '<option value="">Selecciona...</option>';
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c.charAt(0) + c.slice(1).toLowerCase(); sel.appendChild(o); });
+  if (actual && cats.includes(actual)) sel.value = actual;
+  llenarOcProductos();
+}
+function llenarOcProductos() {
+  const cat = document.getElementById('ocCategoria').value;
+  const sel = document.getElementById('ocProductoSel');
+  sel.innerHTML = '';
+  if (!cat) { sel.innerHTML = '<option value="">Selecciona una categoría primero</option>'; return; }
+  const prods = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod) && p.categoria === cat).sort((a, b) => a.producto.localeCompare(b.producto, 'es', { sensitivity: 'base' }));
+  sel.innerHTML = '<option value="">Elige el producto (' + prods.length + ')...</option>';
+  prods.forEach(p => { const o = document.createElement('option'); o.value = p.cod; o.textContent = p.producto + ' — ' + p.cod; sel.appendChild(o); });
+}
+function agregarProductoOc(p) {
+  OC_ITEMS.push({
+    cod: p.cod,
+    producto: (p.marca ? p.marca + ' — ' : '') + p.producto + (p.present ? ' (' + p.present + ')' : ''),
+    cantidad: 1, valor: p.costo || 0, fechaVenc: ''
+  });
+  renderOc();
+}
+document.getElementById('ocCategoria').addEventListener('change', llenarOcProductos);
+document.getElementById('ocProductoSel').addEventListener('change', (e) => {
+  const p = LISTA_PRECIOS.find(x => x.cod === e.target.value);
+  if (p) agregarProductoOc(p);
+  e.target.value = '';
+});
+
 document.getElementById('ocProveedorSelect').addEventListener('change', (e) => {
   document.getElementById('ocProveedorNuevoFields').style.display = e.target.value === '__nuevo__' ? 'grid' : 'none';
 });
@@ -3927,9 +3956,10 @@ const ocResultadosBox = document.getElementById('ocResultados');
 ocSearchInput.addEventListener('input', () => {
   const q = ocSearchInput.value.trim().toLowerCase();
   if (q.length < 1) { ocResultadosBox.classList.remove('show'); ocResultadosBox.innerHTML = ''; return; }
-  const porCodigo = LISTA_PRECIOS.filter(p => p.cod && p.cod.toLowerCase().includes(q));
+  const codificados = LISTA_PRECIOS.filter(p => esCodigoReal(p.cod));
+  const porCodigo = codificados.filter(p => p.cod.toLowerCase().includes(q));
   const porNombre = q.length >= 2
-    ? LISTA_PRECIOS.filter(p => !(p.cod && p.cod.toLowerCase().includes(q)) && (p.marca + ' ' + p.producto).toLowerCase().includes(q))
+    ? codificados.filter(p => !p.cod.toLowerCase().includes(q) && ((p.marca || '') + ' ' + p.producto).toLowerCase().includes(q))
     : [];
   const matches = [...porCodigo, ...porNombre].slice(0, 8);
   ocResultadosBox.innerHTML = '';
@@ -3937,20 +3967,12 @@ ocSearchInput.addEventListener('input', () => {
   matches.forEach(p => {
     const div = document.createElement('div');
     div.className = 'cot-resultado-item';
-    const codTag = p.cod ? `<b>${p.cod}</b> — ` : '';
-    div.innerHTML = `${codTag}${p.marca} — ${p.producto} <span class="rp">${p.present || ''} · costo actual: ${p.costo != null ? fmtCOPc(p.costo) : '—'}</span>`;
+    div.innerHTML = `<b>${p.cod}</b> — ${p.marca ? p.marca + ' — ' : ''}${p.producto} <span class="rp">${p.present || ''} · costo actual: ${p.costo != null ? fmtCOPc(p.costo) : '—'}</span>`;
     div.addEventListener('click', () => {
-      OC_ITEMS.push({
-        cod: p.cod || null,
-        producto: p.marca + ' — ' + p.producto + (p.present ? ' (' + p.present + ')' : ''),
-        cantidad: 1,
-        valor: p.costo || 0,
-        fechaVenc: ''
-      });
+      agregarProductoOc(p);
       ocSearchInput.value = '';
       ocResultadosBox.classList.remove('show');
       ocResultadosBox.innerHTML = '';
-      renderOc();
     });
     ocResultadosBox.appendChild(div);
   });
@@ -3975,12 +3997,12 @@ function renderOc() {
     OC_ITEMS.forEach((item, idx) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${item.producto}</td>
-        <td class="num"><input class="lp-edit" type="number" min="1" value="${item.cantidad}" data-idx="${idx}" data-field="cantidad"></td>
-        <td class="num"><input class="lp-edit" type="number" value="${item.valor}" data-idx="${idx}" data-field="valor"></td>
-        <td><input class="lp-edit" type="date" value="${item.fechaVenc || ''}" data-idx="${idx}" data-field="fechaVenc" required></td>
-        <td class="num">${fmtCOPc(item.cantidad * item.valor)}</td>
-        <td><button class="lp-remove-btn" data-idx="${idx}">Quitar</button></td>
+        <td data-label="Producto" class="prod">${item.producto}</td>
+        <td class="num" data-label="Cantidad"><input class="lp-edit" type="number" min="1" value="${item.cantidad}" data-idx="${idx}" data-field="cantidad"></td>
+        <td class="num" data-label="Valor unitario"><input class="lp-edit" type="number" min="0" value="${item.valor}" data-idx="${idx}" data-field="valor"></td>
+        <td data-label="Vence"><input class="lp-edit" type="date" value="${item.fechaVenc || ''}" data-idx="${idx}" data-field="fechaVenc" required></td>
+        <td class="num" data-label="Subtotal">${fmtCOPc(item.cantidad * item.valor)}</td>
+        <td class="acc"><button class="lp-remove-btn" data-idx="${idx}">Quitar</button></td>
       `;
       tbody.appendChild(tr);
     });
@@ -4003,22 +4025,74 @@ function renderOc() {
   document.getElementById('ocTotal').textContent = fmtCOPc(total);
 }
 
+async function cargarOcDesdeDB() {
+  try {
+    const [rp, ro] = await Promise.all([fetch('/api/proveedores'), fetch('/api/ordenes-compra')]);
+    if (rp.ok) PROVEEDORES = (await rp.json()).map(x => ({ nombre: x.nombre, celular: x.celular || '', direccion: x.direccion || '' }));
+    if (ro.ok) {
+      const lineas = await ro.json();
+      const grupos = {};
+      lineas.forEach(l => {
+        const k = l.oc_numero || ('L' + l.id);
+        if (!grupos[k]) grupos[k] = { ocNum: k, proveedorNombre: l.proveedor, fechaRaw: ocFechaDB(l.fecha), cuentaPago: l.cuenta_pago || 'Efectivo', items: [] };
+        grupos[k].items.push({ cod: l.codigo || ('ID' + l.producto_id), producto: l.producto, cantidad: l.cantidad, valor: l.costo_unitario || 0, fechaVenc: l.fecha_vencimiento || '' });
+      });
+      OC_HISTORIAL = Object.values(grupos).map(g => ({ ...g, fecha: ocFechaCorta(g.fechaRaw), total: g.items.reduce((s, it) => s + it.cantidad * it.valor, 0) }));
+      OC_HISTORIAL.sort((a, b) => (b.fechaRaw - a.fechaRaw) || b.ocNum.localeCompare(a.ocNum));
+    }
+  } catch (e) { console.error('No se pudieron cargar las órdenes de compra:', e); }
+  try { refreshOcProveedorSelect(); } catch (e) {}
+  try { refreshOcCategorias(); } catch (e) {}
+  try { renderOcHistorial(); } catch (e) {}
+}
+
 function renderOcHistorial() {
-  const tbody = document.getElementById('ocHistBody');
-  const table = document.getElementById('ocHistTable');
+  const filtro = document.getElementById('ocMesFiltro');
+  if (!filtro.value) filtro.value = ocIsoHoy().slice(0, 7);
+  const [anio, mes] = filtro.value.split('-').map(Number);
+  const lista = document.getElementById('ocHistLista');
   const vacio = document.getElementById('ocHistVacio');
-  tbody.innerHTML = '';
-  if (OC_HISTORIAL.length === 0) { table.style.display = 'none'; vacio.style.display = 'block'; return; }
-  table.style.display = ''; vacio.style.display = 'none';
-  [...OC_HISTORIAL].reverse().forEach(oc => {
-    const total = oc.items.reduce((s, it) => s + it.cantidad * it.valor, 0);
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${oc.ocNum}</td><td>${oc.proveedorNombre}</td><td>${oc.fecha}</td><td class="num">${fmtCOPc(total)}</td><td><button class="lp-remove-btn oc-edit-btn" data-num="${oc.ocNum}" style="color:var(--jade-dark);">Editar</button></td>`;
-    tbody.appendChild(tr);
+  const resumen = document.getElementById('ocHistResumen');
+  lista.innerHTML = '';
+  const delMes = OC_HISTORIAL.filter(oc => oc.fechaRaw.getFullYear() === anio && oc.fechaRaw.getMonth() === mes - 1);
+  const nombreMes = DATA.meses[mes - 1] + ' ' + anio;
+  if (!delMes.length) {
+    vacio.style.display = 'block';
+    vacio.firstElementChild.textContent = 'No hay órdenes de compra registradas en ' + nombreMes.toLowerCase() + '.';
+    resumen.textContent = '';
+    return;
+  }
+  vacio.style.display = 'none';
+  const totalMes = delMes.reduce((s, oc) => s + oc.total, 0);
+  resumen.innerHTML = '<b>' + nombreMes + ':</b> ' + delMes.length + ' orden(es) · ' + fmtCOPc(totalMes) + ' pagados. Toque una orden para ver a quién se le compró, qué y cuánto se pagó.';
+  delMes.forEach(oc => {
+    const det = document.createElement('details');
+    det.className = 'oc-card';
+    const filas = oc.items.map(it => `<tr><td data-label="Producto" class="prod">${it.producto}</td><td class="num" data-label="Cantidad">${it.cantidad}</td><td class="num" data-label="Valor unitario">${fmtCOPc(it.valor)}</td><td data-label="Vence">${it.fechaVenc || '—'}</td><td class="num" data-label="Subtotal">${fmtCOPc(it.cantidad * it.valor)}</td></tr>`).join('');
+    det.innerHTML = `
+      <summary><span class="oc-num">${oc.ocNum}</span><span class="oc-prov">${oc.proveedorNombre}</span><span class="oc-fecha">${oc.fecha}</span><span class="oc-total">${fmtCOPc(oc.total)}</span></summary>
+      <div class="oc-detalle">
+        <div class="oc-meta"><div><span>Comprado a</span><b>${oc.proveedorNombre}</b></div><div><span>Fecha</span><b>${oc.fecha}</b></div><div><span>Pagado desde</span><b>${oc.cuentaPago}</b></div><div><span>Total pagado</span><b>${fmtCOPc(oc.total)}</b></div></div>
+        <table class="t-cards"><thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Valor unitario</th><th>Vence</th><th class="num">Subtotal</th></tr></thead><tbody>${filas}</tbody></table>
+        <button class="lp-add-btn oc-edit-btn" data-num="${oc.ocNum}">Editar esta orden</button>
+      </div>`;
+    lista.appendChild(det);
   });
-  tbody.querySelectorAll('.oc-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => cargarOcParaEditar(btn.dataset.num));
-  });
+  lista.querySelectorAll('.oc-edit-btn').forEach(btn => btn.addEventListener('click', () => cargarOcParaEditar(btn.dataset.num)));
+}
+document.getElementById('ocMesFiltro').addEventListener('change', renderOcHistorial);
+
+function limpiarFormOc() {
+  OC_ITEMS = [];
+  OC_EDITING_NUM = null;
+  document.getElementById('ocCuentaPago').value = 'Efectivo';
+  document.getElementById('ocProveedorSelect').value = '';
+  document.getElementById('ocProveedorNuevoFields').style.display = 'none';
+  ['ocProvNombre', 'ocProvCelular', 'ocProvDireccion'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ocFecha').value = ocIsoHoy();
+  document.getElementById('ocEditBanner').style.display = 'none';
+  document.getElementById('ocNueva').style.display = 'none';
+  renderOc();
 }
 
 function cargarOcParaEditar(ocNum) {
@@ -4027,146 +4101,81 @@ function cargarOcParaEditar(ocNum) {
   const provIdx = PROVEEDORES.findIndex(p => p.nombre === oc.proveedorNombre);
   document.getElementById('ocProveedorSelect').value = provIdx >= 0 ? 'idx:' + provIdx : '';
   document.getElementById('ocProveedorNuevoFields').style.display = 'none';
-  OC_ITEMS = oc.items.map(it => ({...it}));
+  OC_ITEMS = oc.items.map(it => ({ ...it }));
   OC_EDITING_NUM = oc.ocNum;
-  OC_EDITING_ORIGINAL_ITEMS = oc.items.map(it => ({...it}));
-  OC_EDITING_ORIGINAL_CUENTA = oc.cuentaPago || 'Efectivo';
-  OC_EDITING_ORIGINAL_TOTAL = oc.items.reduce((s, it) => s + it.cantidad * it.valor, 0);
-  document.getElementById('ocCuentaPago').value = OC_EDITING_ORIGINAL_CUENTA;
-
+  document.getElementById('ocCuentaPago').value = oc.cuentaPago || 'Efectivo';
+  document.getElementById('ocFecha').value = ocIsoHoy(oc.fechaRaw);
   document.getElementById('ocEditBanner').style.display = 'flex';
   document.getElementById('ocEditBannerText').textContent = 'Editando la orden ' + oc.ocNum;
   document.getElementById('ocNueva').style.display = '';
-
   renderOc();
-  document.getElementById('panel-administrativo').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('ocProveedorSelect').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-document.getElementById('ocNueva').addEventListener('click', () => {
-  OC_ITEMS = [];
-  OC_EDITING_NUM = null;
-  OC_EDITING_ORIGINAL_ITEMS = null;
-  OC_EDITING_ORIGINAL_CUENTA = null;
-  OC_EDITING_ORIGINAL_TOTAL = 0;
-  document.getElementById('ocCuentaPago').value = 'Efectivo';
-  document.getElementById('ocProveedorSelect').value = '';
-  document.getElementById('ocProveedorNuevoFields').style.display = 'none';
-  ['ocProvNombre','ocProvCelular','ocProvDireccion'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('ocEditBanner').style.display = 'none';
-  document.getElementById('ocNueva').style.display = 'none';
-  renderOc();
-});
+document.getElementById('ocNueva').addEventListener('click', limpiarFormOc);
 
 document.getElementById('ocGuardar').addEventListener('click', async () => {
   const statusEl = document.getElementById('ocStatus');
+  statusEl.style.color = 'var(--danger, #B24A3B)';
   if (OC_ITEMS.length === 0) { statusEl.textContent = 'Agrega al menos un producto.'; return; }
   const sinFecha = OC_ITEMS.find(it => !it.fechaVenc);
   if (sinFecha) { statusEl.textContent = 'Falta la fecha de vencimiento de "' + sinFecha.producto + '". Es obligatoria para cada producto.'; return; }
+  const sinProd = OC_ITEMS.find(it => !DB_PRODUCTO_ID[it.cod]);
+  if (sinProd) { statusEl.textContent = '"' + sinProd.producto + '" no está en el catálogo del inventario.'; return; }
   const provSelVal = document.getElementById('ocProveedorSelect').value;
   if (!provSelVal) { statusEl.textContent = 'Falta seleccionar o crear el proveedor.'; return; }
+  const fechaInput = document.getElementById('ocFecha').value;
+  if (!fechaInput) { statusEl.textContent = 'Falta la fecha de la compra.'; return; }
 
-  let proveedorNombre;
+  let proveedorNombre, celular = null, direccion = null;
   if (provSelVal === '__nuevo__') {
-    const nombre = document.getElementById('ocProvNombre').value.trim();
-    if (!nombre) { statusEl.textContent = 'Falta el nombre del proveedor nuevo.'; return; }
-    PROVEEDORES.unshift({
-      nombre: nombre,
-      celular: document.getElementById('ocProvCelular').value.trim(),
-      direccion: document.getElementById('ocProvDireccion').value.trim()
-    });
-    proveedorNombre = nombre;
-    refreshOcProveedorSelect();
+    proveedorNombre = document.getElementById('ocProvNombre').value.trim();
+    if (!proveedorNombre) { statusEl.textContent = 'Falta el nombre del proveedor nuevo.'; return; }
+    celular = document.getElementById('ocProvCelular').value.trim() || null;
+    direccion = document.getElementById('ocProvDireccion').value.trim() || null;
   } else {
-    const idx = parseInt(provSelVal.replace('idx:', ''));
-    proveedorNombre = PROVEEDORES[idx].nombre;
+    proveedorNombre = PROVEEDORES[parseInt(provSelVal.replace('idx:', ''))].nombre;
   }
-
-  if (OC_ITEMS.length === 0) { statusEl.textContent = 'Agrega al menos un producto.'; return; }
-
   const cuentaPago = document.getElementById('ocCuentaPago').value;
-
-  // Si estamos editando, primero revertimos el efecto en inventario y en caja de la versión anterior
-  if (OC_EDITING_NUM && OC_EDITING_ORIGINAL_ITEMS) {
-    OC_EDITING_ORIGINAL_ITEMS.forEach(it => {
-      if (it.cod) INVENTARIO_STOCK[it.cod] = (INVENTARIO_STOCK[it.cod] || 0) - it.cantidad;
+  const total = OC_ITEMS.reduce((s, it) => s + it.cantidad * it.valor, 0);
+  const btn = document.getElementById('ocGuardar');
+  btn.disabled = true; statusEl.style.color = ''; statusEl.textContent = 'Guardando...';
+  try {
+    const r = await fetch('/api/ordenes-compra/lote', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        oc_numero: OC_EDITING_NUM, proveedor: proveedorNombre, celular, direccion, cuenta_pago: cuentaPago,
+        fecha: fechaInput + ' 12:00:00',
+        items: OC_ITEMS.map(it => ({ producto_id: DB_PRODUCTO_ID[it.cod], cantidad: it.cantidad, costo_unitario: it.valor, fecha_vencimiento: it.fechaVenc }))
+      })
     });
-    if (OC_EDITING_ORIGINAL_CUENTA === 'Efectivo') CAJA_EFECTIVO += OC_EDITING_ORIGINAL_TOTAL;
-    else if (OC_EDITING_ORIGINAL_CUENTA === 'Bancos') CAJA_BANCOS += OC_EDITING_ORIGINAL_TOTAL;
-  }
-
-  // Aplicamos costo y stock con los valores actuales
-  OC_ITEMS.forEach(it => {
-    if (it.cod) {
-      const prod = LISTA_PRECIOS.find(p => p.cod === it.cod);
-      if (prod) prod.costo = it.valor;
-      INVENTARIO_STOCK[it.cod] = (INVENTARIO_STOCK[it.cod] || 0) + it.cantidad;
+    if (!r.ok) {
+      let det = ''; try { det = (await r.json()).error || ''; } catch (e) {}
+      statusEl.style.color = 'var(--danger, #B24A3B)';
+      statusEl.textContent = '⚠ No se guardó la orden (error ' + r.status + (det ? ': ' + det : '') + '). Sus datos siguen en pantalla para reintentar.';
+      return;
     }
-  });
-
-  const fecha = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-  const ocNum = OC_EDITING_NUM || ('OC-' + String(OC_COUNTER).padStart(4, '0'));
-  const ocTotalActual = OC_ITEMS.reduce((s, it) => s + it.cantidad * it.valor, 0);
-  if (ocTotalActual > 0) {
-    registrarMovimientoCaja(cuentaPago, 'Gasto', ocTotalActual, 'Compra a proveedor — ' + proveedorNombre + ' (' + ocNum + ')', fecha);
-  }
-
-  const ocSnapshot = {
-    ocNum: ocNum, proveedorNombre: proveedorNombre, fecha: fecha, cuentaPago: cuentaPago,
-    items: OC_ITEMS.map(it => ({...it}))
-  };
-  const existingIdx = OC_HISTORIAL.findIndex(o => o.ocNum === ocNum);
-  if (existingIdx >= 0) { OC_HISTORIAL[existingIdx] = ocSnapshot; }
-  else { OC_HISTORIAL.push(ocSnapshot); }
-  if (!OC_EDITING_NUM) { OC_COUNTER++; }
-  OC_EDITING_NUM = ocNum;
-  OC_EDITING_ORIGINAL_ITEMS = OC_ITEMS.map(it => ({...it}));
-  OC_EDITING_ORIGINAL_CUENTA = cuentaPago;
-  OC_EDITING_ORIGINAL_TOTAL = ocTotalActual;
-
-  document.getElementById('ocEditBanner').style.display = 'flex';
-  document.getElementById('ocEditBannerText').textContent = 'Editando la orden ' + ocNum;
-  document.getElementById('ocNueva').style.display = '';
-
-  renderOcHistorial();
-  try { renderLista(); } catch (e) {}
-  try { renderInventarioBase(); } catch (e) {}
-
-  // --- Guardado real en la base de datos ---
-  let ocGuardadaReal = 0;
-  for (const it of OC_ITEMS) {
-    const dbId = DB_PRODUCTO_ID[it.cod];
-    if (!dbId) continue;
-    try {
-      const rc = await fetch('/api/ordenes-compra', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ proveedor: proveedorNombre, producto_id: dbId, cantidad: it.cantidad, costo_unitario: it.valor, fecha_vencimiento: it.fechaVenc })
-      });
-      if (rc.ok) {
-        const creada = await rc.json();
-        await fetch('/api/ordenes-compra/' + creada.id + '/recibir', { method: 'PATCH' });
-        ocGuardadaReal++;
-      }
-    } catch (e) { console.error('No se pudo guardar la orden de compra en la base de datos real:', e); }
-  }
-  if (ocGuardadaReal > 0) {
-    try {
-      const ri = await fetch('/api/inventario');
-      if (ri.ok) {
-        const inv = await ri.json();
-        inv.forEach(i => { INVENTARIO_STOCK[i.codigo || ('ID' + i.producto_id)] = i.cantidad_disponible; });
-        try { renderInventarioBase(); } catch (e) {}
-      }
-    } catch (e) {}
-  }
-
-  statusEl.textContent = 'Orden ' + ocNum + ' guardada (' + fmtCOPc(ocTotalActual) + '). Costo, inventario y caja actualizados.' +
-    (ocGuardadaReal > 0 ? ' Guardada en la base de datos real.' : '');
+    const res = await r.json();
+    const edicion = !!OC_EDITING_NUM;
+    limpiarFormOc();
+    document.getElementById('ocMesFiltro').value = fechaInput.slice(0, 7);
+    await Promise.all([recargarProductosYStock(), cargarOcDesdeDB(), recargarCaja()]);
+    try { renderVencidos(); } catch (e) {}
+    statusEl.style.color = 'var(--jade-dark, #3F7364)';
+    statusEl.textContent = '✓ Orden ' + res.oc_numero + (edicion ? ' corregida' : ' guardada') + ' (' + fmtCOPc(total) + '). Inventario, costos y flujo de caja actualizados.';
+  } catch (e) {
+    console.error('No se pudo guardar la orden de compra:', e);
+    statusEl.style.color = 'var(--danger, #B24A3B)';
+    statusEl.textContent = '⚠ No hay conexión con el servidor. Sus datos siguen en pantalla para reintentar.';
+  } finally { btn.disabled = false; }
 });
 
 try {
+  document.getElementById('ocFecha').value = ocIsoHoy();
   refreshOcProveedorSelect();
   renderOc();
   renderOcHistorial();
+  cargarOcDesdeDB();
 } catch (e) { console.error('Error en órdenes de compra:', e); }
 
 // ---- Reportes ----
