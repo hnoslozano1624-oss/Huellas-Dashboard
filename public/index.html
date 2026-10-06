@@ -2761,6 +2761,19 @@ document.getElementById('cotNueva').addEventListener('click', () => {
   updateCotNumero();
 });
 try { renderCotizacion(); updateCotNumero(); renderCotHistorial(); } catch (e) { console.error('Error en cotizaciones:', e); }
+async function cargarCotizacionesDB() {
+  try {
+    const r = await fetch('/api/cotizaciones');
+    if (!r.ok) return;
+    const lista = await r.json();
+    COT_HISTORIAL.length = 0;
+    lista.forEach(q => COT_HISTORIAL.push(q));
+    const max = COT_HISTORIAL.reduce((m, q) => Math.max(m, parseInt(String(q.cotNum).replace(/\D/g, ''), 10) || 0), 0);
+    if (!COT_EDITING_NUM) COT_COUNTER = max + 1;
+    updateCotNumero(); renderCotHistorial();
+  } catch (e) { console.error('No se pudo cargar el historial de cotizaciones:', e); }
+}
+cargarCotizacionesDB();
 
 document.getElementById('cotDescargar').addEventListener('click', async () => {
   const statusEl = document.getElementById('cotStatus');
@@ -2784,6 +2797,9 @@ document.getElementById('cotDescargar').addEventListener('click', async () => {
     const INK = [44,44,44], JADE = [92,158,138], JADE_DARK = [74,130,114],
       SALMON = [232,168,152], LIGHTBG = [245,240,237], MUTED = [140,130,120], WHITE = [255,255,255];
 
+    if (!COT_EDITING_NUM) {
+      try { const rn = await fetch('/api/cotizaciones/siguiente'); if (rn.ok) { const dn = await rn.json(); if (dn.numero > COT_COUNTER) COT_COUNTER = dn.numero; } } catch (e) {}
+    }
     const cotNum = COT_EDITING_NUM || ('COT-' + String(COT_COUNTER).padStart(4, '0'));
     const fecha = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -2928,6 +2944,18 @@ document.getElementById('cotDescargar').addEventListener('click', async () => {
       fecha: fecha,
       items: COT_ITEMS.map(it => ({...it}))
     };
+    const eraNueva = !COT_EDITING_NUM;
+    try {
+      const totalCot = COT_ITEMS.reduce((sm, it) => sm + it.cantidad * it.precio, 0);
+      const rs = await fetch('/api/cotizaciones' + (eraNueva ? '' : '/' + encodeURIComponent(cotNum)), {
+        method: eraNueva ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cot_num: cotNum, nombre: nombre, fecha: fecha, total: totalCot, datos: quoteSnapshot })
+      });
+      if (!rs.ok) throw new Error(rs.status);
+      statusEl.textContent = '✓ PDF descargado y cotización ' + cotNum + ' guardada.';
+    } catch (e) {
+      statusEl.textContent = '⚠ PDF descargado, pero NO se pudo guardar la cotización en el sistema. Revise su conexión e intente de nuevo.';
+    }
     const existingIdx = COT_HISTORIAL.findIndex(q => q.cotNum === cotNum);
     if (existingIdx >= 0) {
       COT_HISTORIAL[existingIdx] = quoteSnapshot;

@@ -490,6 +490,42 @@ async function handleApi(request, env, url) {
     return json({ ok: true, corte, efectivo: neto.Efectivo, bancos: neto.Bancos });
   }
 
+  // --- Cotizaciones (historial permanente) ---
+  if (path.startsWith('cotizaciones')) {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS cotizaciones (cot_num TEXT PRIMARY KEY, nombre TEXT, fecha TEXT, total REAL, datos TEXT NOT NULL, creado_en TEXT NOT NULL DEFAULT (datetime(\'now\')), actualizado_en TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+    const numDe = (c) => parseInt(String(c).replace(/\D/g, ''), 10) || 0;
+    if (path === 'cotizaciones' && method === 'GET') {
+      const { results } = await env.DB.prepare('SELECT cot_num, datos FROM cotizaciones ORDER BY creado_en ASC, cot_num ASC').all();
+      const lista = results.map(r => { try { return JSON.parse(r.datos); } catch (e) { return null; } }).filter(Boolean);
+      return json(lista);
+    }
+    if (path === 'cotizaciones/siguiente' && method === 'GET') {
+      const { results } = await env.DB.prepare('SELECT cot_num FROM cotizaciones').all();
+      const max = results.reduce((m, r) => Math.max(m, numDe(r.cot_num)), 0);
+      return json({ numero: max + 1 });
+    }
+    if (path === 'cotizaciones' && method === 'POST') {
+      const b = await request.json();
+      if (!b.cot_num || !b.datos) return json({ error: 'Faltan datos de la cotización' }, 400);
+      const ya = await env.DB.prepare('SELECT cot_num FROM cotizaciones WHERE cot_num = ?').bind(b.cot_num).first();
+      if (ya) return json({ error: 'Ya existe una cotización con el número ' + b.cot_num }, 409);
+      await env.DB.prepare('INSERT INTO cotizaciones (cot_num, nombre, fecha, total, datos) VALUES (?, ?, ?, ?, ?)')
+        .bind(b.cot_num, b.nombre ?? null, b.fecha ?? null, b.total ?? 0, JSON.stringify(b.datos)).run();
+      return json({ ok: true, cot_num: b.cot_num });
+    }
+    const cotMatch = path.match(/^cotizaciones\/([^/]+)$/);
+    if (cotMatch && method === 'PUT') {
+      const num = decodeURIComponent(cotMatch[1]);
+      const b = await request.json();
+      if (!b.datos) return json({ error: 'Faltan datos de la cotización' }, 400);
+      await env.DB.prepare(
+        `INSERT INTO cotizaciones (cot_num, nombre, fecha, total, datos) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(cot_num) DO UPDATE SET nombre = excluded.nombre, fecha = excluded.fecha, total = excluded.total, datos = excluded.datos, actualizado_en = datetime('now')`
+      ).bind(num, b.nombre ?? null, b.fecha ?? null, b.total ?? 0, JSON.stringify(b.datos)).run();
+      return json({ ok: true, cot_num: num });
+    }
+  }
+
   // --- Cierres de mes ---
   if (path === 'cierres' && method === 'GET') {
     const { results } = await env.DB.prepare('SELECT mes, fecha_cierre FROM cierres_mes ORDER BY mes DESC').all();
