@@ -320,6 +320,21 @@
   .vp-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 6px; }
   .vp-opts label { font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
   .vp-opts input[type=month] { padding: 7px 10px; border: 1px solid var(--border, #d8d8d0); border-radius: 8px; font: inherit; background: transparent; color: inherit; }
+  @media (max-width: 600px) {
+    table.t-cards { min-width: 0 !important; width: 100%; }
+    table.t-cards thead { display: none; }
+    table.t-cards, table.t-cards tbody, table.t-cards tr, table.t-cards td { display: block; width: 100%; box-sizing: border-box; }
+    table.t-cards tr { border: 1px solid var(--card-border, #e6dcd5); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
+    table.t-cards td { border: 0 !important; padding: 4px 0 !important; display: flex; justify-content: space-between; align-items: baseline; gap: 14px; text-align: right; white-space: normal; }
+    table.t-cards td::before { content: attr(data-label); color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: .03em; text-align: left; flex-shrink: 0; }
+    table.t-cards td.prod { font-weight: 600; }
+    table.t-cards td.acc { justify-content: flex-end; gap: 8px; padding-top: 8px !important; }
+    table.t-cards td.acc::before { content: none; }
+    table.t-cards td:empty { display: none; }
+    .inv-tabs .lp-add-btn { flex: 1 1 100%; }
+    .lp-filters { flex-direction: column; align-items: stretch; }
+    .lp-filters > * { width: 100%; max-width: none; }
+  }
   .msg-vacio { padding: 36px 12px; text-align: center; color: var(--muted); font-size: 0.9rem; }
 
   @media (max-width: 860px) {
@@ -577,7 +592,7 @@
             </div>
             <div class="card scrollx">
               <div class="sub" id="ventasPedVacio">Todavía no se ha registrado ningún pedido este mes.</div>
-              <table id="ventasPedTable" style="display:none;">
+              <table class="t-cards" id="ventasPedTable" style="display:none;">
                 <thead>
                   <tr><th>N° Pedido</th><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Línea</th><th class="num">Valor</th><th>Canal</th><th>Vendedor</th><th></th></tr>
                 </thead>
@@ -653,7 +668,7 @@
 
           <div class="card scrollx">
             <div class="sub" id="crmEmptySub">Todavía no hay clientes cargados. La idea es que esta base se alimente desde Solicitud de pedidos cada vez que llegue un cliente nuevo; mientras tanto, puedes ir agregándolos aquí uno por uno.</div>
-            <table id="crmTable" style="display:none;">
+            <table class="t-cards" id="crmTable" style="display:none;">
               <thead>
                 <tr><th>Nombre</th><th>Dirección</th><th>Teléfono</th><th>Canal</th><th></th></tr>
               </thead>
@@ -682,7 +697,7 @@
               <input type="text" id="invSearch" placeholder="Buscar por marca o producto...">
               <select id="invCategoria"><option value="">Todas las categorías</option></select>
             </div>
-            <div style="margin-top:12px; display:flex; gap:8px;">
+            <div class="inv-tabs" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
               <button id="invTabTodos" class="lp-add-btn inv-tab-btn inv-tab-active">Lista completa – entradas</button>
               <button id="invTabDisponibles" class="lp-add-btn inv-tab-btn">✓ Solo disponibles</button>
               <button id="invEntradaToggle" class="lp-add-btn">+ Registrar entrada</button>
@@ -724,7 +739,7 @@
           <div class="card" id="invDisponiblesWrap" style="display:none;">
             <div class="sub" id="invDisponiblesResumen"></div>
             <div class="scrollx" style="margin-top:12px;">
-              <table id="invDisponiblesTable">
+              <table class="t-cards" id="invDisponiblesTable">
                 <thead><tr><th>Producto</th><th>Código</th><th>Categoría</th><th>Presentación</th><th class="num">Disponible</th></tr></thead>
                 <tbody id="invDisponiblesBody"></tbody>
               </table>
@@ -734,7 +749,7 @@
 
           <div class="card scrollx" id="invTablaWrap">
             <div class="sub">Solo productos con código HO asignado. La columna «Disponible» suma las entradas (órdenes de compra recibidas y entradas registradas aquí) y descuenta las ventas. Para un producto nuevo use «+ Registrar entrada».</div>
-            <table id="invTable">
+            <table class="t-cards" id="invTable">
               <thead>
                 <tr><th>Categoría</th><th>Código</th><th>Marca</th><th>Producto</th><th>Presentación</th><th class="num">Disponible</th></tr>
               </thead>
@@ -1312,7 +1327,7 @@
           <div class="section-title"><span class="dot"></span>Últimos pedidos enviados</div>
           <div class="card scrollx">
             <div class="sub" id="pedHistVacio">Todavía no se ha enviado ningún pedido.</div>
-            <table id="pedHistTable" style="display:none;">
+            <table class="t-cards" id="pedHistTable" style="display:none;">
               <thead><tr><th>N° Pedido</th><th>Vendedor</th><th>Cliente</th><th class="num">Total</th><th>Forma de pago</th><th></th></tr></thead>
               <tbody id="pedHistBody"></tbody>
             </table>
@@ -1993,7 +2008,7 @@ function renderInventarioDisponibles() {
     const cantidad = INVENTARIO_STOCK[p.cod] || 0;
     const nivel = cantidad <= 3 ? 'var(--danger, #B24A3B)' : (cantidad <= 8 ? '#B8860B' : 'var(--jade-dark, #3F7364)');
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.producto}</td><td>${p.cod}</td><td>${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</td><td>${[p.marca, p.present].filter(Boolean).join(' · ') || '—'}</td><td class="num" style="font-weight:700; color:${nivel};">${cantidad}</td>`;
+    tr.innerHTML = `<td data-label="Producto" class="prod">${p.producto}</td><td data-label="Código">${p.cod}</td><td data-label="Categoría">${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</td><td data-label="Presentación">${[p.marca, p.present].filter(Boolean).join(' · ') || '—'}</td><td class="num" data-label="Disponible" style="font-weight:700; color:${nivel};">${cantidad}</td>`;
     body.appendChild(tr);
   });
 }
@@ -2051,12 +2066,12 @@ function renderInventarioBase() {
     const tr = document.createElement('tr');
     const disponible = (typeof INVENTARIO_STOCK !== 'undefined' && INVENTARIO_STOCK[p.cod]) || 0;
     tr.innerHTML = `
-      <td>${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</td>
-      <td>${p.cod}</td>
-      <td>${p.marca}</td>
-      <td>${p.producto}</td>
-      <td>${p.present}</td>
-      <td class="num">${disponible}</td>
+      <td data-label="Categoría">${p.categoria.charAt(0) + p.categoria.slice(1).toLowerCase()}</td>
+      <td data-label="Código">${p.cod}</td>
+      <td data-label="Marca">${p.marca}</td>
+      <td data-label="Producto" class="prod">${p.producto}</td>
+      <td data-label="Presentación">${p.present}</td>
+      <td class="num" data-label="Disponible">${disponible}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -2477,7 +2492,7 @@ function renderCrm() {
     rows.forEach(c => {
       const realIdx = CRM_CLIENTES.indexOf(c);
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${c.nombre}</td><td>${c.direccion || '—'}</td><td>${c.telefono || '—'}</td><td>${c.canal}</td><td><button class="lp-remove-btn crm-edit-btn" data-idx="${realIdx}" style="color:var(--jade-dark);">Editar</button> <button class="lp-remove-btn crm-delete-btn" data-idx="${realIdx}">Borrar</button></td>`;
+      tr.innerHTML = `<td data-label="Cliente" class="prod">${c.nombre}</td><td data-label="Dirección">${c.direccion || '—'}</td><td data-label="Teléfono">${c.telefono || '—'}</td><td data-label="Canal">${c.canal}</td><td class="acc"><button class="lp-remove-btn crm-edit-btn" data-idx="${realIdx}" style="color:var(--jade-dark);">Editar</button> <button class="lp-remove-btn crm-delete-btn" data-idx="${realIdx}">Borrar</button></td>`;
       tr.querySelector('td').style.cursor = 'pointer';
       tr.addEventListener('click', (e) => {
         if (e.target.closest('.crm-delete-btn')) return;
@@ -3318,7 +3333,7 @@ function renderPedHistorial() {
   table.style.display = ''; vacio.style.display = 'none';
   [...PEDIDOS_HISTORIAL].reverse().slice(0, 15).forEach(p => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.pedidoNum}</td><td>${p.vendedor}</td><td>${p.clienteNombre}</td><td class="num">${fmtCOPc(p.total)}</td><td>${p.formaPago}</td><td><button class="lp-remove-btn ped-edit-btn" data-num="${p.pedidoNum}" style="color:var(--jade-dark);">Editar</button></td>`;
+    tr.innerHTML = `<td data-label="N° pedido">${p.pedidoNum}</td><td data-label="Vendedor">${p.vendedor}</td><td data-label="Cliente" class="prod">${p.clienteNombre}</td><td class="num" data-label="Total">${fmtCOPc(p.total)}</td><td data-label="Pago">${p.formaPago}</td><td class="acc"><button class="lp-remove-btn ped-edit-btn" data-num="${p.pedidoNum}" style="color:var(--jade-dark);">Editar</button></td>`;
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll('.ped-edit-btn').forEach(btn => {
@@ -3737,7 +3752,7 @@ function renderVentasPedidos() {
     table.style.display = ''; vacio.style.display = 'none';
     rows.forEach(r => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.pedidoNum}</td><td>${r.fecha}</td><td>${r.cliente}</td><td>${r.producto}</td><td>${r.linea}</td><td class="num">${fmtCOPc(r.valor)}</td><td>${r.canal || '—'}</td><td>${r.vendedor}</td><td><button class="lp-remove-btn ventas-edit-btn" data-num="${r.pedidoNum}" style="color:var(--jade-dark);">Editar</button> <button class="lp-remove-btn ventas-del-btn" data-num="${r.pedidoNum}">Eliminar</button></td>`;
+      tr.innerHTML = `<td data-label="N° pedido">${r.pedidoNum}</td><td data-label="Fecha">${r.fecha}</td><td data-label="Cliente">${r.cliente}</td><td data-label="Producto">${r.producto}</td><td data-label="Línea">${r.linea}</td><td class="num" data-label="Valor">${fmtCOPc(r.valor)}</td><td data-label="Canal">${r.canal || '—'}</td><td data-label="Vendedor">${r.vendedor}</td><td class="acc"><button class="lp-remove-btn ventas-edit-btn" data-num="${r.pedidoNum}" style="color:var(--jade-dark);">Editar</button> <button class="lp-remove-btn ventas-del-btn" data-num="${r.pedidoNum}">Eliminar</button></td>`;
       tbody.appendChild(tr);
     });
   }
