@@ -314,6 +314,12 @@
   .ped-sticky { display: none; }
   .grid-eq { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 780px) { .grid-eq { grid-template-columns: 1fr; } }
+  .vp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .vp-tab { border: 1px solid var(--border, #d8d8d0); background: transparent; color: inherit; padding: 8px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 0.85rem; }
+  .vp-tab.active { background: var(--jade); border-color: var(--jade); color: #fff; }
+  .vp-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; margin-bottom: 6px; }
+  .vp-opts label { font-size: 0.85rem; display: flex; align-items: center; gap: 8px; }
+  .vp-opts input[type=month] { padding: 7px 10px; border: 1px solid var(--border, #d8d8d0); border-radius: 8px; font: inherit; background: transparent; color: inherit; }
   .msg-vacio { padding: 36px 12px; text-align: center; color: var(--muted); font-size: 0.9rem; }
 
   @media (max-width: 860px) {
@@ -520,37 +526,22 @@
 
         <section>
           <div class="section-title"><span class="dot"></span>Ventas por canal, línea y vendedor</div>
-          <div class="grid-eq">
-            <div class="card">
-              <h3>Por canal · mes</h3>
-              <div class="sub" id="subCanalMes"></div>
-              <div class="chart-box"><canvas id="chartCanalMes"></canvas></div>
-              <div class="msg-vacio" id="msgCanalMes" style="display:none;"></div>
+          <div class="card">
+            <div class="vp-tabs" id="vpTabs">
+              <button type="button" class="vp-tab active" data-vp="canal">Canal</button>
+              <button type="button" class="vp-tab" data-vp="linea">Línea de negocio</button>
+              <button type="button" class="vp-tab" data-vp="vendedor">Vendedor</button>
             </div>
-            <div class="card">
-              <h3>Por canal · acumulado</h3>
-              <div class="sub" id="subCanalAcum"></div>
-              <div class="chart-box"><canvas id="chartCanalAcum"></canvas></div>
-              <div class="msg-vacio" id="msgCanalAcum" style="display:none;"></div>
+            <div class="vp-controles">
+              <div class="vp-opts"><label>Mes <input type="month" id="vpMes" min="2025-03" max="2026-12"></label></div>
+              <div class="vp-tabs" id="vpModo">
+                <button type="button" class="vp-tab active" data-modo="mes">Del mes</button>
+                <button type="button" class="vp-tab" data-modo="acum">Acumulado</button>
+              </div>
             </div>
-            <div class="card">
-              <h3>Por línea de negocio · mes</h3>
-              <div class="sub" id="subLineaMes"></div>
-              <div class="chart-box"><canvas id="chartLineaMes"></canvas></div>
-              <div class="msg-vacio" id="msgLineaMes" style="display:none;"></div>
-            </div>
-            <div class="card">
-              <h3>Por línea de negocio · acumulado</h3>
-              <div class="sub" id="subLineaAcum"></div>
-              <div class="chart-box"><canvas id="chartLineaAcum"></canvas></div>
-              <div class="msg-vacio" id="msgLineaAcum" style="display:none;"></div>
-            </div>
-            <div class="card">
-              <h3>Por vendedor · mes</h3>
-              <div class="sub" id="subVendedor"></div>
-              <div class="chart-box"><canvas id="chartVendedor"></canvas></div>
-              <div class="msg-vacio" id="msgVendedor" style="display:none;"></div>
-            </div>
+            <div class="sub" id="vpSub"></div>
+            <div class="chart-box"><canvas id="chartVentasPor"></canvas></div>
+            <div class="msg-vacio" id="msgVentasPor" style="display:none;"></div>
           </div>
         </section>
 
@@ -1606,10 +1597,11 @@ function actualizarDashboardMes() {
   renderTop5(anioSel, mesIdx);
 }
 
+let vpTab = 'canal', vpModo = 'mes', vpManual = false;
 try {
   const dm = document.getElementById('dashMesFiltro');
   dm.value = mesPasadoISO();
-  dm.addEventListener('change', () => { actualizarDashboardMes(); try { renderGraficasDashboard(); } catch (e) {} });
+  dm.addEventListener('change', () => { vpManual = false; actualizarDashboardMes(); try { renderGraficasDashboard(); } catch (e) {} });
   actualizarDashboardMes();
 } catch (e) {}
 
@@ -1701,46 +1693,49 @@ function donut(canvasId, dataObj) {
   });
 }
 
-function donutOMensaje(canvasId, msgId, dataObj, textoVacio) {
-  const cv = document.getElementById(canvasId), msg = document.getElementById(msgId);
-  const total = Object.values(dataObj || {}).reduce((a, b) => a + b, 0);
-  const ex = Chart.getChart(canvasId); if (ex) ex.destroy();
-  if (total > 0) { cv.parentElement.style.display = ''; msg.style.display = 'none'; donut(canvasId, dataObj); }
-  else { cv.parentElement.style.display = 'none'; msg.style.display = 'block'; msg.textContent = textoVacio; }
-}
 
 function dibujarBloquesMes() {
-  const val = document.getElementById('dashMesFiltro').value;
-  if (!val) return;
+  const dashVal = document.getElementById('dashMesFiltro').value;
+  const vpMes = document.getElementById('vpMes');
+  if (!vpManual || !vpMes.value) vpMes.value = dashVal;
+  const val = vpMes.value; if (!val) return;
   const [anio, mm] = val.split('-').map(Number); const idx = mm - 1;
-  const mes = datosMes(anio, idx), acum = acumuladoHasta(anio, idx);
   const nombre = DATA.meses[idx] + ' ' + anio;
-  const rango = 'Acumulado ' + DATA.meses[0].toLowerCase() + '–' + DATA.meses[idx].toLowerCase() + ' ' + anio;
-  const setTxt = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
-  ['subCanalMes', 'subLineaMes', 'subVendedor'].forEach(id => setTxt(id, nombre));
-  ['subCanalAcum', 'subLineaAcum'].forEach(id => setTxt(id, rango));
-  const vacioMes = 'Todavía no hay ventas registradas en ' + nombre.toLowerCase() + '.';
-  donutOMensaje('chartCanalMes', 'msgCanalMes', mes.canal, vacioMes);
-  donutOMensaje('chartLineaMes', 'msgLineaMes', mes.linea, vacioMes);
-  donutOMensaje('chartCanalAcum', 'msgCanalAcum', acum.canal, 'Sin ventas registradas en el año hasta este mes.');
-  donutOMensaje('chartLineaAcum', 'msgLineaAcum', acum.linea, 'Sin ventas registradas en el año hasta este mes.');
-
-  const cv = document.getElementById('chartVendedor'), msg = document.getElementById('msgVendedor');
-  const ex = Chart.getChart('chartVendedor'); if (ex) ex.destroy();
-  const vend = mes.vendedor;
-  if (vend && Object.keys(vend).length) {
-    cv.parentElement.style.display = ''; msg.style.display = 'none';
-    new Chart(cv, {
-      type: 'bar',
-      data: { labels: Object.keys(vend).map(v => v.length > 14 ? v.split(' ')[0] : v), datasets: [{ data: Object.values(vend), backgroundColor: palette, borderRadius: 6 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
-        scales: { y: { grid: { color: gridColor }, ticks: { callback: v => '$' + (v / 1000000).toFixed(1) + 'M' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
-    });
-  } else {
-    cv.parentElement.style.display = 'none'; msg.style.display = 'block';
-    msg.textContent = vend === null ? 'Sin detalle por vendedor: el histórico anterior a agosto 2026 no lo registra.' : vacioMes;
+  const esVend = vpTab === 'vendedor';
+  document.querySelectorAll('#vpTabs .vp-tab').forEach(b => b.classList.toggle('active', b.dataset.vp === vpTab));
+  document.querySelectorAll('#vpModo .vp-tab').forEach(b => b.classList.toggle('active', b.dataset.modo === vpModo));
+  document.getElementById('vpModo').style.display = esVend ? 'none' : '';
+  const acumulado = !esVend && vpModo === 'acum';
+  document.getElementById('vpSub').textContent = acumulado
+    ? 'Acumulado ' + DATA.meses[0].toLowerCase() + '–' + DATA.meses[idx].toLowerCase() + ' ' + anio
+    : nombre;
+  const cv = document.getElementById('chartVentasPor'), msg = document.getElementById('msgVentasPor');
+  const ex = Chart.getChart('chartVentasPor'); if (ex) ex.destroy();
+  const mostrarMsg = (t) => { cv.parentElement.style.display = 'none'; msg.style.display = 'block'; msg.textContent = t; };
+  const mes = datosMes(anio, idx);
+  const vacio = 'Todavía no hay ventas registradas en ' + nombre.toLowerCase() + '.';
+  if (esVend) {
+    const vend = mes.vendedor;
+    if (vend && Object.keys(vend).length) {
+      cv.parentElement.style.display = ''; msg.style.display = 'none';
+      new Chart(cv, {
+        type: 'bar',
+        data: { labels: Object.keys(vend).map(v => v.length > 14 ? v.split(' ')[0] : v), datasets: [{ data: Object.values(vend), backgroundColor: palette, borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+          scales: { y: { grid: { color: gridColor }, ticks: { callback: v => '$' + (v / 1000000).toFixed(1) + 'M' } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+      });
+    } else mostrarMsg(vend === null ? 'Sin detalle por vendedor: el histórico anterior a agosto 2026 no lo registra.' : vacio);
+    return;
   }
+  const data = acumulado ? acumuladoHasta(anio, idx)[vpTab] : mes[vpTab];
+  const total = Object.values(data || {}).reduce((a, b) => a + b, 0);
+  if (total > 0) { cv.parentElement.style.display = ''; msg.style.display = 'none'; donut('chartVentasPor', data); }
+  else mostrarMsg(acumulado ? 'Sin ventas registradas en el año hasta este mes.' : vacio);
 }
+
+document.querySelectorAll('#vpTabs .vp-tab').forEach(b => b.addEventListener('click', () => { vpTab = b.dataset.vp; dibujarBloquesMes(); }));
+document.querySelectorAll('#vpModo .vp-tab').forEach(b => b.addEventListener('click', () => { vpModo = b.dataset.modo; dibujarBloquesMes(); }));
+document.getElementById('vpMes').addEventListener('change', () => { vpManual = true; dibujarBloquesMes(); });
 
 function renderGraficasDashboard() {
   const d = construirDatosGraficas();
