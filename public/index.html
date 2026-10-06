@@ -4623,13 +4623,19 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
     const INK = [44,44,44], JADE = [92,158,138], JADE_DARK = [74,130,114], MUTED = [140,130,120];
     let y = 60;
 
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(...INK);
-    doc.text('Huellas Online — Reporte Ejecutivo', margin, y);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(...MUTED);
-    y += 18;
-    doc.text('Mes de referencia: ' + d.nombreMes, margin, y);
-    doc.setFillColor(...JADE); doc.rect(margin, y + 12, pageW - 2*margin, 3, 'F');
-    y += 40;
+    // Encabezado corporativo con logo
+    const logoEl = document.querySelector('#loginGate .logo-img');
+    let logoOk = false;
+    try { doc.addImage(logoEl.src, 'PNG', margin, 34, 62, 62); logoOk = true; } catch (e) { console.error('Logo:', e); }
+    const tx = logoOk ? margin + 76 : margin;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(...INK);
+    doc.text('Huellas Online', tx, 58);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(...JADE_DARK);
+    doc.text('Reporte Ejecutivo de Ventas', tx, 75);
+    doc.setFontSize(10); doc.setTextColor(...MUTED);
+    doc.text('Mes de referencia: ' + d.nombreMes, tx, 90);
+    doc.setFillColor(...JADE); doc.rect(margin, 106, pageW - 2*margin, 3, 'F');
+    y = 142;
 
     // Indicadores del mes (los mismos del Dashboard)
     const cartTot = (typeof CARTERA !== 'undefined' ? CARTERA : []).reduce((sm, c) => sm + (c.saldo != null ? c.saldo : c.total), 0);
@@ -4672,7 +4678,7 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...INK);
       doc.text(titulo, x, y); doc.addImage(url, 'PNG', x, y + 8, w, h);
     }
-    function espacio(h) { if (y + h > 740) { doc.addPage(); y = 60; } }
+    function espacio(h) { if (y + h > 752) { doc.addPage(); y = 60; } }
     const mensual = (anio) => DATA.meses.map((_, i) => { try { return datosMes(anio, i).ventas || 0; } catch (e) { return 0; } });
     const sinCero = (arr) => arr.map(v => v > 0 ? v : null);
     const mil = { callback: v => '$' + (v / 1000000).toFixed(1) + 'M' };
@@ -4690,7 +4696,7 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
       }
     };
     try {
-      espacio(230);
+      espacio(210);
       ponerGrafica('Ventas mes a mes · ' + (d.anioSel - 1) + ' vs ' + d.anioSel, graficaImg({
         type: 'line',
         data: { labels: DATA.meses, datasets: [
@@ -4699,8 +4705,8 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
         ] },
         options: { layout: { padding: { top: 18, bottom: 10, right: 14, left: 8 } }, scales: { y: { ticks: mil, beginAtZero: true }, x: { grid: { display: false } } }, plugins: { legend: { position: 'top' } } },
         plugins: [etiquetasPuntos]
-      }, 516, 200), margin, 516, 200);
-      y += 220;
+      }, 516, 180), margin, 516, 180);
+      y += 200;
     } catch (e) { console.error('Gráfica mensual:', e); }
 
     function dona(obj) {
@@ -4709,13 +4715,13 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
         options: { plugins: { legend: { position: 'right', labels: { font: { size: 11 }, boxWidth: 12 } } } } };
     }
     try {
-      espacio(230);
+      espacio(212);
       const gw = 250;
-      if (d.porCanal.length) ponerGrafica('Ventas por canal · ' + d.nombreMes, graficaImg(dona(d.porCanal), gw, 190), margin, gw, 190);
-      if (d.porLinea.length) ponerGrafica('Ventas por línea · ' + d.nombreMes, graficaImg(dona(d.porLinea), gw, 190), margin + gw + 16, gw, 190);
-      y += 215;
+      if (d.porCanal.length) ponerGrafica('Ventas por canal · ' + d.nombreMes, graficaImg(dona(d.porCanal), gw, 180), margin, gw, 180);
+      if (d.porLinea.length) ponerGrafica('Ventas por línea · ' + d.nombreMes, graficaImg(dona(d.porLinea), gw, 180), margin + gw + 16, gw, 180);
+      y += 205;
       if (d.porVendedor.length) {
-        espacio(230);
+        espacio(215);
         ponerGrafica('Ventas por vendedor · ' + d.nombreMes, graficaImg({
           type: 'bar', data: { labels: d.porVendedor.map(v => v.nombre.length > 14 ? v.nombre.split(' ')[0] : v.nombre), datasets: [{ data: d.porVendedor.map(v => v.valor), backgroundColor: PAL, borderRadius: 6 }] },
           options: { plugins: { legend: { display: false } }, scales: { y: { ticks: mil, beginAtZero: true }, x: { grid: { display: false } } } }
@@ -4785,7 +4791,17 @@ document.getElementById('repDescargarPdf').addEventListener('click', () => {
     });
 
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
-    doc.text('Basado en los pedidos registrados en el sistema y en el histórico de ventas cargado en el dashboard.', margin, 760);
+    doc.text('Basado en los pedidos registrados en el sistema y en el histórico de ventas cargado en el dashboard.', margin, 756);
+
+    const nPag = doc.getNumberOfPages();
+    for (let pg = 1; pg <= nPag; pg++) {
+      doc.setPage(pg);
+      doc.setDrawColor(220,210,204); doc.setLineWidth(0.5); doc.line(margin, 772, pageW - margin, 772);
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(...MUTED);
+      doc.text('Huellas Online · Con cada paso, un amigo.', margin, 784);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Página ' + pg + ' de ' + nPag, pageW - margin, 784, { align: 'right' });
+    }
 
     const blob = doc.output('blob');
     const filename = 'Reporte_Ejecutivo_' + d.nombreMes.replace(' ', '_') + '.pdf';
