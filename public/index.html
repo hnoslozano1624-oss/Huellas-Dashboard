@@ -3047,6 +3047,8 @@ function renderCartera() {
       const medio = tr.querySelector('.cartera-abono-medio').value;
       const monto = parseFloat(input.value);
       if (!monto || monto <= 0) { input.focus(); return; }
+      const cc = CARTERA.find(x => x.pedidoNum === btn.dataset.num);
+      if (!confirm('¿Registrar un abono de ' + fmtCOPc(monto) + ' (' + medio + ') de ' + (cc ? cc.cliente : 'este cliente') + '? Entrará a Caja hoy.')) return;
       registrarAbonoCartera(btn.dataset.num, monto, medio);
     });
   });
@@ -3070,6 +3072,7 @@ function renderCartera() {
       const medio = tr.querySelector('.cartera-total-medio').value;
       const c = CARTERA.find(x => x.pedidoNum === btn.dataset.num);
       if (!c) return;
+      if (!confirm('¿Registrar el PAGO TOTAL de ' + c.cliente + ' por ' + fmtCOPc(c.saldo != null ? c.saldo : c.total) + ' (' + medio + ')? Entrará a Caja hoy.')) return;
       registrarAbonoCartera(btn.dataset.num, c.saldo != null ? c.saldo : c.total, medio);
     });
   });
