@@ -1170,7 +1170,14 @@
 
         <div class="subpanel" id="sub-caja">
 
-          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Registre ingresos y egresos con su fecha.</li><li>Para comenzar un nuevo periodo use «Iniciar saldo de un nuevo periodo»: indique fecha, efectivo y bancos.</li></ul></details>
+          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul>
+            <li><b>Qué muestra:</b> el dinero que realmente hay en <b>Efectivo</b> y en <b>Bancos</b> (transferencias), el total en caja y la cartera por cobrar, que todavía <b>no</b> está en caja.</li>
+            <li><b>Se alimenta sola:</b> las ventas de contado y por transferencia, los abonos y pagos de cartera, y las órdenes de compra pagadas se registran aquí automáticamente. No hay que digitarlos de nuevo.</li>
+            <li><b>Lo único que se registra a mano</b> son los gastos y compras que no vienen de una orden de compra (papelería, servicios, transporte, pauta). Use «Registrar gasto o compra administrativa»: elija el tipo, escriba el concepto, la cuenta de donde salió el dinero, el valor y la fecha.</li>
+            <li><b>Cartera:</b> una venta a crédito entra a caja solo cuando se cobra (abono o pago total en el módulo de Cartera). Si ya se cobró antes y ese dinero ya está en el saldo, use «Ya se pagó antes» en Cartera para no duplicarlo.</li>
+            <li><b>Movimientos:</b> aquí queda el historial completo. Nada se borra; si hay que corregir un saldo, se registra un movimiento de ajuste.</li>
+            <li><b>Cuidado:</b> antes de confirmar un gasto revise la cuenta (Efectivo o Bancos). Si la caja no coincide con lo que hay en realidad, avise para hacer el ajuste en vez de registrar saldos nuevos.</li>
+          </ul></details>
           <div class="kpi-grid" style="margin-bottom:16px;">
             <div class="kpi">
               <div class="label">Efectivo</div>
@@ -1611,6 +1618,10 @@ function mesPasadoISO() {
   const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
+function mesActualISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
 function claveMes(anio, idx) { return anio + '-' + String(idx + 1).padStart(2, '0'); }
 function esMesHistorico(anio, idx) { const a = DATA['ventas_' + anio + '_mensual']; return !!(a && (a[idx] || 0) > 0); }
 function canalCanon(c) { const u = String(c || 'SIN CANAL').trim().toUpperCase(); return u === 'VOLANTE' ? 'VOLANTES' : u; }
@@ -1751,7 +1762,8 @@ function actualizarDashboardMes() {
 let vpTab = 'canal', vpModo = 'mes', vpManual = false;
 try {
   const dm = document.getElementById('dashMesFiltro');
-  dm.value = mesPasadoISO();
+  dm.max = (new Date().getFullYear() + 1) + '-12';
+  dm.value = mesActualISO();
   dm.addEventListener('change', () => { vpManual = false; actualizarDashboardMes(); try { renderGraficasDashboard(); } catch (e) {} });
   actualizarDashboardMes();
 } catch (e) {}
@@ -3080,7 +3092,7 @@ function actualizarFiltrosAlMesConDatos() {
   const vf = document.getElementById('ventasMesFiltro');
   if (vf) { vf.value = mes; try { renderVentasPedidos(); } catch (e) {} try { actualizarBotonCierreMes(); } catch (e) {} }
   const dm = document.getElementById('dashMesFiltro');
-  if (dm) { dm.value = mes; try { actualizarDashboardMes(); } catch (e) {} }
+  if (dm) { dm.value = mesActualISO(); try { actualizarDashboardMes(); } catch (e) {} }
 }
 
 let PED_COUNTER = 678;
