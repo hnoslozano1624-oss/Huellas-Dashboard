@@ -3228,6 +3228,7 @@ async function sincronizarCarteraDesdeD1() {
     }
   } catch (e) { console.error('No se pudo cargar la cartera real:', e); }
   try { renderCartera(); } catch (e) {}
+  try { renderCajaMovimientos(); } catch (e) {}
 }
 
 function registrarAbonoCartera(pedidoNum, monto, medio) {
