@@ -1192,18 +1192,6 @@
           </div>
 
           <div class="card" style="margin-bottom:16px;">
-            <h3>Iniciar saldo de un nuevo periodo</h3>
-            <div class="sub" style="margin-bottom:10px;">Úsalo para arrancar un flujo de caja nuevo (por ejemplo, el 1 de octubre) con el saldo real que tienes en ese momento, sin tener que reconstruir todo el historial anterior.</div>
-            <div class="lp-form-grid">
-              <div><label>Fecha del saldo inicial</label><input type="date" id="cajaSaldoFecha"></div>
-              <div><label>Saldo inicial en Efectivo</label><input type="number" id="cajaSaldoEfectivo" placeholder="0"></div>
-              <div><label>Saldo inicial en Bancos</label><input type="number" id="cajaSaldoBancos" placeholder="0"></div>
-            </div>
-            <button id="cajaSaldoGuardar" class="lp-add-btn" style="margin-top:12px;">Registrar saldo inicial</button>
-            <span id="cajaSaldoStatus" class="sub" style="margin-left:12px;"></span>
-          </div>
-
-          <div class="card" style="margin-bottom:16px;">
             <h3>Registrar gasto o compra administrativa</h3>
             <div class="sub">Para gastos y compras que no vienen de una orden de compra: papelería, servicios, transporte, pauta en redes, etc. Descuenta de la cuenta elegida.</div>
             <div class="lp-form-grid" style="margin-top:10px;">
@@ -3273,22 +3261,6 @@ function registrarMovimientoCaja(cuenta, tipo, valor, concepto, fecha, pedidoId,
     })
   }).catch(err => console.error('No se pudo registrar el movimiento en el flujo de caja real:', err));
 }
-
-document.getElementById('cajaSaldoGuardar').addEventListener('click', () => {
-  const statusEl = document.getElementById('cajaSaldoStatus');
-  const fechaInput = document.getElementById('cajaSaldoFecha').value;
-  if (!fechaInput) { statusEl.textContent = 'Falta la fecha del saldo inicial.'; return; }
-  const efectivo = parseFloat(document.getElementById('cajaSaldoEfectivo').value) || 0;
-  const bancos = parseFloat(document.getElementById('cajaSaldoBancos').value) || 0;
-  if (efectivo === 0 && bancos === 0) { statusEl.textContent = 'Ingresa al menos un valor mayor a 0.'; return; }
-  const fechaDB = fechaInput + ' 05:00:01'; // medianoche de Colombia (UTC-5)
-  const fechaDisplay = new Date(fechaInput + 'T12:00:00').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-  if (efectivo > 0) registrarMovimientoCaja('Efectivo', 'Ingreso', efectivo, 'Saldo inicial del periodo', fechaDisplay, null, false, fechaDB);
-  if (bancos > 0) registrarMovimientoCaja('Bancos', 'Ingreso', bancos, 'Saldo inicial del periodo', fechaDisplay, null, false, fechaDB);
-  statusEl.textContent = 'Saldo inicial registrado con fecha ' + fechaDisplay + '.';
-  document.getElementById('cajaSaldoEfectivo').value = '';
-  document.getElementById('cajaSaldoBancos').value = '';
-});
 
 function renderCajaMovimientos() {
   const tbody = document.getElementById('cajaMovBody');
