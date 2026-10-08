@@ -947,7 +947,7 @@
 
         <div class="subpanel" id="sub-vencidos">
 
-          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Esta lista se llena sola con las fechas de vencimiento de las órdenes de compra.</li><li>Rojo: vencido o a 30 días o menos. Amarillo: hasta 60 días. Verde: hasta 90 días.</li><li>Toque un producto (o el icono 👥) para ver qué clientes ya lo compraron y escribirles por WhatsApp.</li></ul></details>
+          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ul><li>Esta lista se llena sola con las fechas de vencimiento de las órdenes de compra.</li><li>Rojo: vencido o a 30 días o menos. Amarillo: hasta 60 días. Verde: hasta 90 días.</li><li>Toque un producto (o el icono 👥) para ver qué clientes ya lo compraron y escribirles por WhatsApp.</li><li>Con el icono 🗑 elimina un producto de esta lista (por ejemplo, si ya se vendió o se retiró). Solo se quita de aquí: la orden de compra, los costos y la caja no cambian.</li></ul></details>
           <div class="alert" style="margin-bottom:16px;">
             <span class="ico">⏰</span>
             <div>Productos ya recibidos cuya fecha de vencimiento está a 3 meses o menos — prioriza su rotación o promoción antes de que se venzan.</div>
@@ -1595,7 +1595,12 @@ async function renderVencidos() {
       const color = dias < 0 ? 'var(--danger, #B24A3B)' : (dias <= 30 ? 'var(--danger, #B24A3B)' : (dias <= 60 ? '#B8860B' : 'var(--jade-dark, #3F7364)'));
       const etiqueta = dias < 0 ? ('Vencido hace ' + Math.abs(dias) + ' días') : (dias + ' días');
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td data-label="Producto" class="prod">${f.producto}${f.codigo ? ' (' + f.codigo + ')' : ''}</td><td data-label="Categoría">${f.categoria}</td><td class="num" data-label="Cantidad">${f.cantidad}</td><td data-label="Vence">${f.fecha_vencimiento}</td><td class="num" data-label="Días" style="color:${color}; font-weight:bold;">${etiqueta}</td><td class="acc"><button type="button" class="lp-remove-btn venc-clientes-btn" title="Clientes que lo compraron" aria-label="Clientes que lo compraron" style="color:var(--jade-dark);font-size:1.1rem;">👥</button></td>`;
+      tr.innerHTML = `<td data-label="Producto" class="prod">${f.producto}${f.codigo ? ' (' + f.codigo + ')' : ''}</td><td data-label="Categoría">${f.categoria}</td><td class="num" data-label="Cantidad">${f.cantidad}</td><td data-label="Vence">${f.fecha_vencimiento}</td><td class="num" data-label="Días" style="color:${color}; font-weight:bold;">${etiqueta}</td><td class="acc"><button type="button" class="lp-remove-btn venc-clientes-btn" title="Clientes que lo compraron" aria-label="Clientes que lo compraron" style="color:var(--jade-dark);font-size:1.1rem;">👥</button><button type="button" class="lp-remove-btn venc-del-btn" title="Eliminar de esta lista" aria-label="Eliminar de esta lista" style="font-size:1.1rem;">🗑</button></td>`;
+      tr.querySelector('.venc-del-btn').addEventListener('click', async () => {
+        if (!confirm('¿Eliminar "' + f.producto + '" (vence ' + f.fecha_vencimiento + ') de la lista de vencidos?\n\nSolo se quita de esta lista; la orden de compra, los costos y la caja no cambian.')) return;
+        try { const rr = await fetch('/api/vencidos/' + f.id, { method: 'DELETE' }); if (!rr.ok) throw new Error(); renderVencidos(); }
+        catch (e) { alert('No se pudo eliminar. Intente de nuevo.'); }
+      });
       tr.querySelector('.venc-clientes-btn').addEventListener('click', () => abrirCompradoresProducto(f));
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', (e) => { if (!e.target.closest('button')) abrirCompradoresProducto(f); });

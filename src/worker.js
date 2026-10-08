@@ -385,12 +385,22 @@ async function handleApi(request, env, url) {
       .bind(recibirMatch[1]).run();
     return json({ ok: true });
   }
+  // Quitar una línea de la lista de vencidos: solo la oculta de esta lista (no toca la orden de compra, costos ni caja)
+  if (path === 'vencidos' && method === 'GET' || path.match(/^vencidos\/\d+$/)) {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS vencidos_ocultos (oc_id INTEGER PRIMARY KEY, fecha TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+  }
+  const vencDel = path.match(/^vencidos\/(\d+)$/);
+  if (vencDel && method === 'DELETE') {
+    await env.DB.prepare('INSERT OR IGNORE INTO vencidos_ocultos (oc_id) VALUES (?)').bind(Number(vencDel[1])).run();
+    return json({ ok: true });
+  }
   if (path === 'vencidos' && method === 'GET') {
     const { results } = await env.DB.prepare(
       `SELECT oc.id, oc.fecha, p.codigo, p.nombre AS producto, p.categoria, oc.cantidad, oc.fecha_vencimiento,
               CAST(julianday(oc.fecha_vencimiento) - julianday('now') AS INTEGER) AS dias_restantes
        FROM ordenes_compra oc JOIN productos p ON p.id = oc.producto_id
        WHERE oc.estado = 'recibida' AND oc.fecha_vencimiento IS NOT NULL
+         AND oc.id NOT IN (SELECT oc_id FROM vencidos_ocultos)
          AND julianday(oc.fecha_vencimiento) - julianday('now') <= 90
        ORDER BY oc.fecha_vencimiento ASC`
     ).all();
