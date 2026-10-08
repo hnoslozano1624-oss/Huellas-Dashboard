@@ -796,7 +796,6 @@
               <button id="invTabTodos" class="lp-add-btn inv-tab-btn inv-tab-active">Lista completa – entradas</button>
               <button id="invTabDisponibles" class="lp-add-btn inv-tab-btn">✓ Solo disponibles</button>
               <button id="invEntradaToggle" class="lp-add-btn">+ Registrar entrada</button>
-              <button id="invAjusteToggle" class="lp-add-btn">✏️ Ajustar cantidades</button>
             </div>
           </div>
 
@@ -841,19 +840,6 @@
               </table>
             </div>
             <div class="sub" id="invDisponiblesVacio" style="display:none; padding:20px 0; text-align:center;">Todavía no hay productos con stock disponible.</div>
-          </div>
-
-          <div class="card" id="invAjusteBar" style="margin-bottom:16px; display:none;">
-            <h3>Ajustar cantidades (conteo físico)</h3>
-            <div class="sub">Escriba la cantidad real que hay de cada producto. Solo se guardan los que cambie; queda registro de la cantidad anterior. Puede buscar o filtrar por categoría sin perder lo que ya digitó.</div>
-            <div class="lp-form-grid" style="margin-top:10px; max-width:520px;">
-              <div><label>Motivo (opcional)</label><input type="text" id="invAjusteNota" placeholder="Ej. Conteo físico de octubre"></div>
-            </div>
-            <div style="margin-top:12px; display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
-              <button id="invAjusteGuardar" class="lp-add-btn lp-add-submit">Guardar ajustes</button>
-              <button id="invAjusteCancelar" class="lp-add-btn lp-add-cancel">Cancelar</button>
-              <span id="invAjusteStatus" class="sub"></span>
-            </div>
           </div>
 
           <div class="card scrollx" id="invTablaWrap">
@@ -2149,50 +2135,6 @@ function updateInventarioSummary() {
   renderInventarioBase();
 }
 
-let INV_EDIT = false, INV_EDIT_VALORES = {};
-function contarAjustes() {
-  const n = Object.keys(INV_EDIT_VALORES).filter(c => INV_EDIT_VALORES[c] !== '' && Number(INV_EDIT_VALORES[c]) !== (INVENTARIO_STOCK[c] || 0)).length;
-  const st = document.getElementById('invAjusteStatus'); if (st) st.textContent = n ? n + (n === 1 ? ' producto con cambios sin guardar' : ' productos con cambios sin guardar') : '';
-  return n;
-}
-function salirEdicionInventario() {
-  INV_EDIT = false; INV_EDIT_VALORES = {};
-  document.getElementById('invAjusteBar').style.display = 'none';
-  document.getElementById('invAjusteToggle').classList.remove('inv-tab-active');
-  renderInventarioBase();
-}
-document.getElementById('invAjusteToggle').addEventListener('click', () => {
-  if (INV_EDIT) { salirEdicionInventario(); return; }
-  INV_EDIT = true; INV_EDIT_VALORES = {};
-  document.getElementById('invTabTodos').click();
-  document.getElementById('invAjusteBar').style.display = '';
-  document.getElementById('invAjusteStatus').textContent = '';
-  renderInventarioBase();
-  document.getElementById('invAjusteBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
-document.getElementById('invAjusteCancelar').addEventListener('click', salirEdicionInventario);
-document.getElementById('invAjusteGuardar').addEventListener('click', async () => {
-  const st = document.getElementById('invAjusteStatus'), btn = document.getElementById('invAjusteGuardar');
-  const cambios = Object.keys(INV_EDIT_VALORES).filter(c => INV_EDIT_VALORES[c] !== '' && Number(INV_EDIT_VALORES[c]) !== (INVENTARIO_STOCK[c] || 0));
-  if (!cambios.length) { st.textContent = 'No hay cambios para guardar.'; return; }
-  for (const c of cambios) { const v = Number(INV_EDIT_VALORES[c]); if (!Number.isInteger(v) || v < 0) { st.textContent = '⚠ Revise la cantidad de ' + c + ': debe ser un número entero, 0 o mayor.'; return; } }
-  if (!confirm('Se actualizarán las existencias de ' + cambios.length + ' producto(s). ¿Continuar?')) return;
-  btn.disabled = true;
-  try {
-    const r = await fetch('/api/inventario/ajuste', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      nota: document.getElementById('invAjusteNota').value.trim() || 'Ajuste manual (conteo físico)',
-      ajustes: cambios.map(c => ({ producto_id: DB_PRODUCTO_ID[c], cantidad: Number(INV_EDIT_VALORES[c]) }))
-    }) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { st.textContent = '⚠ ' + (d.error || 'No se pudo guardar.'); btn.disabled = false; return; }
-    await recargarProductosYStock();
-    const n = d.ajustados;
-    salirEdicionInventario();
-    document.getElementById('invAjusteStatus').textContent = '';
-    alert('Inventario actualizado: ' + n + ' producto(s) ajustado(s).');
-  } catch (e) { st.textContent = '⚠ Sin conexión con el servidor.'; }
-  btn.disabled = false;
-});
 function renderInventarioBase() {
   const invCatSelect = document.getElementById('invCategoria');
   if (!invCatSelect) return;
@@ -2229,18 +2171,9 @@ function renderInventarioBase() {
       <td data-label="Marca">${p.marca}</td>
       <td data-label="Producto" class="prod">${p.producto}</td>
       <td data-label="Presentación">${p.present}</td>
-      <td class="num" data-label="Disponible">${INV_EDIT ? '<input type="number" min="0" step="1" class="inv-edit-input" data-cod="' + p.cod + '" value="' + (Object.prototype.hasOwnProperty.call(INV_EDIT_VALORES, p.cod) ? INV_EDIT_VALORES[p.cod] : disponible) + '" style="width:90px; text-align:right;">' : disponible}</td>
+      <td class="num" data-label="Disponible">${disponible}</td>
     `;
     tbody.appendChild(tr);
-  });
-  if (INV_EDIT) tbody.querySelectorAll('.inv-edit-input').forEach(inp => {
-    const cod = inp.dataset.cod, orig = (INVENTARIO_STOCK[cod] || 0);
-    inp.addEventListener('input', () => {
-      INV_EDIT_VALORES[cod] = inp.value;
-      inp.style.background = (inp.value !== '' && Number(inp.value) !== orig) ? 'rgba(232,168,152,0.35)' : '';
-      contarAjustes();
-    });
-    if (Object.prototype.hasOwnProperty.call(INV_EDIT_VALORES, cod) && Number(INV_EDIT_VALORES[cod]) !== orig) inp.style.background = 'rgba(232,168,152,0.35)';
   });
 
   const wrapDisp = document.getElementById('invDisponiblesWrap');

@@ -79,26 +79,6 @@ async function handleApi(request, env, url) {
     return json({ ok: true, cantidad_disponible: fila ? fila.cantidad_disponible : null });
   }
 
-  // --- Ajuste manual de existencias (conteo físico): fija la cantidad y deja registro de lo anterior ---
-  if (path === 'inventario/ajuste' && method === 'POST') {
-    const b = await request.json().catch(() => ({}));
-    const items = Array.isArray(b.ajustes) ? b.ajustes : [];
-    if (!items.length) return json({ error: 'No hay ajustes para guardar' }, 400);
-    await env.DB.prepare('CREATE TABLE IF NOT EXISTS ajustes_inventario (id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL DEFAULT (datetime(\'now\')), producto_id INTEGER NOT NULL, anterior INTEGER NOT NULL, nuevo INTEGER NOT NULL, nota TEXT)').run();
-    const hechos = [];
-    for (const it of items) {
-      const pid = Number(it.producto_id), nuevo = Number(it.cantidad);
-      if (!pid || !Number.isInteger(nuevo) || nuevo < 0) return json({ error: 'Cantidad inválida (debe ser un número entero, 0 o mayor)' }, 400);
-      const fila = await env.DB.prepare('SELECT cantidad_disponible FROM inventario WHERE producto_id = ?').bind(pid).first();
-      if (!fila) continue;
-      if (fila.cantidad_disponible === nuevo) continue;
-      await env.DB.prepare("UPDATE inventario SET cantidad_disponible = ?, actualizado_en = datetime('now') WHERE producto_id = ?").bind(nuevo, pid).run();
-      await env.DB.prepare('INSERT INTO ajustes_inventario (producto_id, anterior, nuevo, nota) VALUES (?, ?, ?, ?)').bind(pid, fila.cantidad_disponible, nuevo, b.nota || 'Ajuste manual').run();
-      hechos.push({ producto_id: pid, anterior: fila.cantidad_disponible, nuevo });
-    }
-    return json({ ok: true, ajustados: hechos.length, detalle: hechos });
-  }
-
   // --- Lista de precios: competencia y productos solo de mercado (no tocan el inventario) ---
   if (path === 'competencia' && method === 'GET') {
     await asegurarEsquemaLista(env);
