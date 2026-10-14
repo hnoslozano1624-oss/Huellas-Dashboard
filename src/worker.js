@@ -442,6 +442,25 @@ async function handleApi(request, env, url) {
     results.forEach(r => { r.saldo = r.total - r.abonado; });
     return json(results);
   }
+  const sinCajaMatch = path.match(/^pedidos\/(\d+)\/abono-sin-caja$/);
+  if (sinCajaMatch && method === 'POST') {
+    // Abono de un pago hecho antes: reduce el saldo del pedido pero NO crea ningún movimiento en flujo_caja
+    const id = Number(sinCajaMatch[1]);
+    const b = await request.json().catch(() => ({}));
+    const monto = Number(b.monto);
+    if (!isFinite(monto) || monto <= 0) return json({ error: 'Valor inválido' }, 400);
+    const ped = await env.DB.prepare(
+      `SELECT pe.total, pe.forma_pago, COALESCE((SELECT SUM(monto) FROM abonos WHERE pedido_id = pe.id), 0) AS abonado FROM pedidos pe WHERE pe.id = ?`
+    ).bind(id).first();
+    if (!ped) return json({ error: 'El pedido no existe' }, 404);
+    if (ped.forma_pago === 'Efectivo' || ped.forma_pago === 'Transferencia') return json({ error: 'Solo los pedidos a crédito están en cartera' }, 400);
+    const aplicado = Math.min(monto, ped.total - ped.abonado);
+    if (aplicado <= 0) return json({ error: 'El pedido no tiene saldo pendiente' }, 409);
+    await env.DB.prepare('INSERT INTO abonos (pedido_id, monto, medio) VALUES (?, ?, ?)').bind(id, aplicado, 'Pago anterior (sin caja)').run();
+    const saldo = ped.total - ped.abonado - aplicado;
+    if (saldo <= 0) await env.DB.prepare("UPDATE pedidos SET estado_pago = 'pagado' WHERE id = ?").bind(id).run();
+    return json({ ok: true, aplicado, saldo });
+  }
   const abonosMatch = path.match(/^pedidos\/(\d+)\/abonos$/);
   if (abonosMatch && method === 'GET') {
     const { results } = await env.DB.prepare(
