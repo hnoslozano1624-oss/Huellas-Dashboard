@@ -377,9 +377,6 @@
   .pry-rojo { background: #fde4e0; color: #b3392b; } .pry-ambar { background: #fff0d1; color: #94620a; }
   .pry-verde { background: #dff1e8; color: #2f7a57; } .pry-gris { background: #ece7e2; color: #6d6459; }
   .pry-tag { font-size: 0.72rem; color: #8c8278; display: block; }
-  .pry-wa { background: #25a35a; color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
-  .pry-wa[disabled] { background: #cfc8c0; cursor: not-allowed; }
-  #pryPlantilla { width: 100%; min-height: 84px; padding: 10px; border: 1.5px solid var(--border, #e8dfd8); border-radius: 10px; font: inherit; }
   .ped-letras { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
   .ped-letras button { all: unset; cursor: pointer; box-sizing: border-box; min-width: 34px; height: 34px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--card-border); border-radius: 8px; font-weight: 700; font-size: 0.85rem; color: var(--jade-dark); background: var(--bg); }
   .ped-letras button:hover { border-color: var(--jade); }
@@ -895,7 +892,7 @@
           <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ol>
             <li>El sistema revisa cada cliente con sus pedidos registrados y calcula cada cuántos días suele comprar. Con eso estima cuándo le toca volver a comprar.</li>
             <li>Elija el mes a proyectar. Del día 20 en adelante se abre sola la proyección del mes siguiente.</li>
-            <li>«Atrasado» significa que ya pasó su fecha esperada: conviene escribirle ya. El botón de WhatsApp abre el mensaje listo para enviar.</li>
+            <li>«Atrasado» significa que ya pasó su fecha esperada: conviene contactarlo ya. Marque «Contactado» cuando le haya escrito o llamado.</li>
             <li>Abajo ve cuántas unidades de cada producto podrían salir, comparadas con el stock actual, para planear compras a proveedores.</li>
           </ol></details>
 
@@ -922,12 +919,6 @@
               <tbody id="pryBody"></tbody>
             </table>
             <div id="pryVacio" class="sub" style="margin-top:10px; display:none;">No hay clientes por contactar para este mes con el historial actual.</div>
-          </div>
-
-          <div class="card" style="margin-bottom:16px;">
-            <h3>Mensaje de WhatsApp</h3>
-            <div class="sub">Use {nombre} y {productos}: se reemplazan solos con los datos de cada cliente. Se guarda en este navegador.</div>
-            <textarea id="pryPlantilla"></textarea>
           </div>
 
           <div class="card scrollx" style="margin-bottom:16px;">
@@ -5598,7 +5589,6 @@ try { remRenderClientes(); remRenderResumen(); } catch (e) {}
 
 // ---- Proyecciones de compra de clientes ----
 const PRY_DIAS_AVISO = 5;      // se sugiere escribir 5 días antes de la fecha esperada
-const PRY_PLANTILLA = 'Hola {nombre} 🐾, te escribimos de Huellas Online. Por estas fechas suele necesitar su pedido de {productos}. ¿Le separamos y le llevamos lo de siempre? Quedamos atentos 🐶🐱';
 let PRY_LISTA = [], PRY_INV = [];
 
 function pryDia(d) { return d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); }
@@ -5608,13 +5598,6 @@ function pryFechaTxt(iso) { const [y, m, d] = iso.split('-').map(Number); return
 function pryMediana(a) { const s = [...a].sort((x, y) => x - y), m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 function pryMesNombre(ym) { const [y, m] = ym.split('-').map(Number); const t = new Date(y, m - 1, 1).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); }
 function pryFinMes(ym) { const [y, m] = ym.split('-').map(Number); return pryNum(pryIso(Math.round(Date.UTC(y, m, 1) / 86400000) - 1)); }
-function pryNombreCorto(n) { const w = String(n || '').trim().split(/\s+/)[0] || ''; return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }
-function pryTelefono(t) {
-  const d = String(t || '').replace(/\D/g, '');
-  if (d.length === 10 && d.startsWith('3')) return '57' + d;
-  if (d.length === 12 && d.startsWith('57')) return d;
-  return d.length >= 10 ? d : '';
-}
 
 function pryCalcularClientes() {
   const hoyIso = pryDia(new Date()), hoy = pryNum(hoyIso);
@@ -5675,12 +5658,6 @@ function pryCalcularClientes() {
 
 function pryContactados() { try { return JSON.parse(localStorage.getItem('pryContactados') || '{}'); } catch (e) { return {}; } }
 function pryGuardarContactado(k, v) { try { const c = pryContactados(); if (v) c[k] = 1; else delete c[k]; localStorage.setItem('pryContactados', JSON.stringify(c)); } catch (e) {} }
-function pryPlantilla() { try { return localStorage.getItem('pryPlantilla') || PRY_PLANTILLA; } catch (e) { return PRY_PLANTILLA; } }
-function pryMensaje(cl) {
-  const prods = cl.habituales.slice(0, 3).map(x => x.producto).join(', ') || 'siempre';
-  return pryPlantilla().replace(/\{nombre\}/g, pryNombreCorto(cl.nombre)).replace(/\{productos\}/g, prods);
-}
-
 function pryInitMeses() {
   const sel = document.getElementById('pryMes'); if (!sel || sel.options.length) return;
   const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
@@ -5738,9 +5715,7 @@ function renderProyecciones() {
       '<td class="num" data-label="Ticket prom.">' + fmtCOPc(c.ticket) + '</td>' +
       '<td class="num" data-label="Cartera">' + (c.cartera > 0 ? '<span class="pry-chip pry-rojo">' + fmtCOPc(c.cartera) + '</span>' : '—') + '</td>' +
       '<td data-label="Suele llevar" style="min-width:200px;">' + remEsc(c.habituales.slice(0, 3).map(x => x.cantidad + '× ' + x.producto).join(' · ')) + (c.habituales.length > 3 ? ' …' : '') + '</td>' +
-      '<td data-label="Contacto" style="white-space:nowrap;"><button type="button" class="pry-wa"' + (pryTelefono(c.telefono) ? '' : ' disabled title="Este cliente no tiene celular registrado"') + '>' + (pryTelefono(c.telefono) ? '💬 WhatsApp' : 'Sin celular') + '</button> <label style="font-size:0.78rem;"><input type="checkbox" class="pry-ok" ' + (cont[k] ? 'checked' : '') + '> Contactado</label></td>';
-    const wa = tr.querySelector('.pry-wa');
-    wa.addEventListener('click', () => { const t = pryTelefono(c.telefono); if (t) window.open('https://wa.me/' + t + '?text=' + encodeURIComponent(pryMensaje(c)), '_blank', 'noopener'); });
+      '<td data-label="Contacto" style="white-space:nowrap;">' + (c.telefono ? '<b>' + remEsc(c.telefono) + '</b>' : '<span class="pry-tag">sin celular registrado</span>') + '<label style="font-size:0.8rem; display:block; margin-top:4px;"><input type="checkbox" class="pry-ok" ' + (cont[k] ? 'checked' : '') + '> Contactado</label></td>';
     tr.querySelector('.pry-ok').addEventListener('change', (e) => pryGuardarContactado(k, e.target.checked));
     body.appendChild(tr);
   });
@@ -5767,11 +5742,6 @@ function renderProyecciones() {
 
 document.getElementById('pryMes').addEventListener('change', () => renderProyecciones());
 document.getElementById('pryModo').addEventListener('change', () => renderProyecciones());
-(function () {
-  const ta = document.getElementById('pryPlantilla');
-  ta.value = pryPlantilla();
-  ta.addEventListener('input', () => { try { localStorage.setItem('pryPlantilla', ta.value); } catch (e) {} });
-})();
 document.getElementById('pryExcel').addEventListener('click', () => {
   if (typeof XLSX === 'undefined') { alert('No se pudo cargar el generador de Excel. Revise la conexión.'); return; }
   const ym = document.getElementById('pryMes').value, hoy = pryNum(pryDia(new Date()));
