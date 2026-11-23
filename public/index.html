@@ -1113,7 +1113,7 @@
               <div class="cot-brand-name">Huellas Online</div>
               <div class="cot-brand-slogan">Con cada paso, un amigo</div>
             </div>
-            <div class="cot-numero">Remisión N° <span id="remNumeroDisplay">REM-0001</span></div>
+            <div class="cot-numero">Remisión de entrega N° <span id="remNumeroDisplay">REM-0001</span></div>
           </div>
 
           <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ol><li>Elija la letra inicial del cliente y luego el cliente.</li><li>Aparecen los pedidos que ese cliente ha comprado. Marque los productos que quiere incluir en la remisión (los valores vienen tal cual de la venta).</li><li>Si entrega menos unidades de las vendidas, ajuste la cantidad; el valor unitario no cambia.</li><li>Elija el ejecutivo comercial y la fecha, y presione «Descargar remisión en PDF». El número se asigna solo.</li></ol></details>
@@ -5295,9 +5295,10 @@ function remGenerarPDF(d) {
     doc.text('Con cada paso, un amigo', margin + 78, 58);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED);
     doc.text('huellasonline2@gmail.com', margin + 78, 74);
-    doc.text('REMISIÓN DE ENTREGA', pageW - margin, 32, { align: 'right' });
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(24); doc.setTextColor(...JADE_DARK);
-    doc.text('N° ' + String(d.num).padStart(4, '0'), pageW - margin, 60, { align: 'right' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor(...INK);
+    doc.text('REMISIÓN DE ENTREGA', pageW - margin, 38, { align: 'right' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.setTextColor(...JADE_DARK);
+    doc.text('N° ' + String(d.num).padStart(4, '0'), pageW - margin, 62, { align: 'right' });
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED);
     doc.text(fechaTxt, pageW - margin, 76, { align: 'right' });
     doc.setFillColor(...JADE); doc.rect(0, 96, pageW, 4, 'F');
@@ -5307,7 +5308,7 @@ function remGenerarPDF(d) {
     doc.setDrawColor(220,210,200); doc.setLineWidth(0.6); doc.line(margin, fy, pageW - margin, fy);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...MUTED);
     doc.text('Huellas Online · Con cada paso, un amigo · huellasonline2@gmail.com', pageW / 2, fy + 16, { align: 'center' });
-    doc.text('Remisión de entrega ' + numTxt + ' · Este documento no es una factura.', pageW / 2, fy + 28, { align: 'center' });
+    doc.text('Remisión de entrega ' + numTxt, pageW / 2, fy + 28, { align: 'center' });
   };
 
   encabezado();
