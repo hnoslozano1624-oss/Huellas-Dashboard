@@ -1164,8 +1164,15 @@
             <div class="cot-total-row"><span>Total</span><span id="remTotal">$0</span></div>
           </div>
 
+          <div id="remEditBanner" class="alert" style="display:none; margin-bottom:16px;">
+            <div class="ico">✏️</div>
+            <div><b id="remEditBannerText">Editando una remisión existente</b>
+            Al descargar, se actualiza esta misma remisión (conserva su número) y se genera el PDF con los cambios.</div>
+          </div>
+
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <button id="remDescargar" class="lp-add-btn">⬇ Descargar remisión en PDF</button>
+            <button id="remCancelarEdicion" class="lp-add-btn lp-add-cancel" style="display:none;">Cancelar edición</button>
             <span id="remStatus" class="sub"></span>
           </div>
 
@@ -5137,6 +5144,8 @@ let REM_CLIENTE = null;      // objeto de CRM_CLIENTES
 let REM_SEL = {};            // clave "pedido|indice" -> { marcado, cantidad }
 let REM_PEDIDOS = [];        // pedidos del cliente elegido
 let REM_HIST = [];
+let REM_EDIT_NUM = null;    // número de la remisión que se está editando
+let REM_EXTRA = [];         // ítems de la remisión editada que ya no se encuentran en los pedidos
 
 function remNum(n) { return 'REM-' + String(n).padStart(4, '0'); }
 function remHoyISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
@@ -5243,7 +5252,7 @@ function remRenderPedidos() {
 }
 
 function remItemsSeleccionados() {
-  const out = [];
+  const out = REM_EXTRA.map(x => ({ ...x }));
   REM_PEDIDOS.forEach(p => p.items.forEach((it, i) => {
     const st = REM_SEL[p.pedidoNum + '|' + i];
     if (!st) return;
@@ -5273,7 +5282,9 @@ async function remSiguienteNumero() {
   return null;
 }
 async function remActualizarNumero() {
+  if (REM_EDIT_NUM) { document.getElementById('remNumeroDisplay').textContent = remNum(REM_EDIT_NUM); return; }
   const n = await remSiguienteNumero();
+  if (REM_EDIT_NUM) { document.getElementById('remNumeroDisplay').textContent = remNum(REM_EDIT_NUM); return; }
   document.getElementById('remNumeroDisplay').textContent = n ? remNum(n) : 'REM-····';
 }
 
@@ -5401,6 +5412,62 @@ function remDescargarDoc(d) {
   a.click(); URL.revokeObjectURL(url);
 }
 
+function remSalirEdicion(limpiar) {
+  REM_EDIT_NUM = null; REM_EXTRA = [];
+  document.getElementById('remEditBanner').style.display = 'none';
+  document.getElementById('remCancelarEdicion').style.display = 'none';
+  document.getElementById('remDescargar').textContent = '⬇ Descargar remisión en PDF';
+  if (limpiar) {
+    REM_SEL = {}; REM_LETRA = '';
+    document.getElementById('remClienteSelect').value = '';
+    remRenderClientes(); remElegirCliente(null);
+    document.getElementById('remObs').value = '';
+    document.getElementById('remFecha').value = remHoyISO();
+  }
+  remActualizarNumero();
+}
+
+function remEditar(d) {
+  remSalirEdicion(false);
+  REM_EDIT_NUM = d.num;
+  const nombre = d.cliente && d.cliente.nombre;
+  let c = CRM_CLIENTES.find(x => normTxt(x.nombre) === normTxt(nombre));
+  if (!c) c = { nombre: nombre, telefono: (d.cliente && d.cliente.telefono) || '', direccion: (d.cliente && d.cliente.direccion) || '', canal: (d.cliente && d.cliente.canal) || '' };
+  REM_LETRA = pedLetraDe(c.nombre);
+  remRenderClientes();
+  const idx = CRM_CLIENTES.indexOf(c);
+  document.getElementById('remClienteSelect').value = idx >= 0 ? 'idx:' + idx : '';
+  remElegirCliente(c);
+  // Marcar los productos que ya estaban en la remisión, con sus cantidades
+  const usados = new Set();
+  REM_EXTRA = [];
+  (d.items || []).forEach(sv => {
+    let hallado = false;
+    for (const p of REM_PEDIDOS) {
+      if (String(p.pedidoNum) !== String(sv.pedido)) continue;
+      const i = p.items.findIndex((it, k) => !usados.has(p.pedidoNum + '|' + k) && it.producto === sv.producto);
+      if (i >= 0) {
+        usados.add(p.pedidoNum + '|' + i);
+        REM_SEL[p.pedidoNum + '|' + i] = { pedido: p, idx: i, cantidad: Math.min(p.items[i].cantidad, sv.cantidad) };
+        hallado = true; break;
+      }
+    }
+    if (!hallado) REM_EXTRA.push({ pedido: sv.pedido, producto: sv.producto, present: sv.present || '', cantidad: sv.cantidad, precio: sv.precio, valor: sv.valor });
+  });
+  remRenderPedidos(); remRenderResumen();
+  document.getElementById('remEjecutivo').value = d.ejecutivo || 'Juliet Lievano';
+  document.getElementById('remFecha').value = d.fecha || remHoyISO();
+  document.getElementById('remObs').value = d.obs || '';
+  document.getElementById('remEditBannerText').textContent = 'Editando la remisión ' + remNum(d.num) + ' de ' + (nombre || '') + '. ';
+  document.getElementById('remEditBanner').style.display = '';
+  document.getElementById('remCancelarEdicion').style.display = '';
+  document.getElementById('remDescargar').textContent = '⬇ Guardar cambios y descargar PDF';
+  document.getElementById('remStatus').textContent = REM_EXTRA.length ? 'Nota: ' + REM_EXTRA.length + ' producto(s) de esta remisión ya no están en los pedidos del cliente; se conservan tal cual.' : '';
+  remActualizarNumero();
+  try { document.getElementById('sub-remision').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+}
+document.getElementById('remCancelarEdicion').addEventListener('click', () => { remSalirEdicion(true); document.getElementById('remStatus').textContent = 'Edición cancelada.'; });
+
 async function cargarRemisionesDB() {
   try {
     const r = await fetch('/api/remisiones');
@@ -5413,8 +5480,9 @@ async function cargarRemisionesDB() {
   lista.forEach(d => {
     const tr = document.createElement('tr');
     const total = (d.items || []).reduce((s, it) => s + it.valor, 0);
-    tr.innerHTML = '<td>' + remNum(d.num) + '</td><td class="prod">' + remEsc(d.cliente && d.cliente.nombre) + '</td><td>' + remFechaTxt(d.fecha) + '</td><td>' + remEsc(d.ejecutivo) + '</td><td class="num">' + fmtCOPc(total) + '</td><td class="acc"><button type="button" class="lp-add-btn lp-add-cancel" style="padding:6px 12px;">⬇ PDF</button></td>';
-    tr.querySelector('button').addEventListener('click', () => { try { remDescargarDoc(d); } catch (e) { alert('No se pudo generar el PDF.'); } });
+    tr.innerHTML = '<td>' + remNum(d.num) + '</td><td class="prod">' + remEsc(d.cliente && d.cliente.nombre) + '</td><td>' + remFechaTxt(d.fecha) + '</td><td>' + remEsc(d.ejecutivo) + '</td><td class="num">' + fmtCOPc(total) + '</td><td class="acc"><button type="button" class="lp-add-btn lp-add-cancel rem-h-pdf" style="padding:6px 12px;">⬇ PDF</button> <button type="button" class="lp-add-btn lp-add-cancel rem-h-edit" style="padding:6px 12px;">✏️ Editar</button></td>';
+    tr.querySelector('.rem-h-pdf').addEventListener('click', () => { try { remDescargarDoc(d); } catch (e) { alert('No se pudo generar el PDF.'); } });
+    tr.querySelector('.rem-h-edit').addEventListener('click', () => remEditar(d));
     body.appendChild(tr);
   });
   document.getElementById('remHistVacio').style.display = lista.length ? 'none' : '';
@@ -5442,14 +5510,15 @@ document.getElementById('remDescargar').addEventListener('click', async () => {
     items: items.map(i => ({ pedido: i.pedido, producto: i.producto, present: i.present, cantidad: i.cantidad, precio: i.precio, valor: i.valor }))
   };
   try {
-    const r = await fetch('/api/remisiones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cliente: datos.cliente.nombre, fecha: datos.fecha, ejecutivo: datos.ejecutivo, total: items.reduce((s, i) => s + i.valor, 0), datos }) });
+    const editando = REM_EDIT_NUM;
+    const cuerpo = JSON.stringify({ cliente: datos.cliente.nombre, fecha: datos.fecha, ejecutivo: datos.ejecutivo, total: items.reduce((s, i) => s + i.valor, 0), datos });
+    const r = await fetch('/api/remisiones' + (editando ? '/' + editando : ''), { method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: cuerpo });
     if (!r.ok) throw new Error('http ' + r.status);
     const saved = await r.json();
-    datos.num = saved.numero;
+    datos.num = editando || saved.numero;
     remDescargarDoc(datos);
-    st.textContent = 'Remisión ' + remNum(datos.num) + ' descargada.';
-    REM_SEL = {}; remRenderPedidos(); remRenderResumen();
-    document.getElementById('remObs').value = '';
+    st.textContent = 'Remisión ' + remNum(datos.num) + (editando ? ' actualizada y descargada.' : ' descargada.');
+    if (editando) { remSalirEdicion(true); } else { REM_SEL = {}; remRenderPedidos(); remRenderResumen(); document.getElementById('remObs').value = ''; }
     cargarRemisionesDB(); remActualizarNumero();
   } catch (e) {
     console.error(e);

@@ -543,6 +543,17 @@ async function handleApi(request, env, url) {
       const fila = await env.DB.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'remisiones'").first();
       return json({ numero: (fila ? fila.seq : 0) + 1 });
     }
+    const remPut = path.match(/^remisiones\/(\d+)$/);
+    if (remPut && method === 'PUT') {
+      const id = Number(remPut[1]);
+      const b = await request.json().catch(() => ({}));
+      if (!b.datos || !Array.isArray(b.datos.items) || !b.datos.items.length) return json({ error: 'La remisión no tiene productos' }, 400);
+      const existe = await env.DB.prepare('SELECT id FROM remisiones WHERE id = ?').bind(id).first();
+      if (!existe) return json({ error: 'La remisión no existe' }, 404);
+      await env.DB.prepare('UPDATE remisiones SET cliente = ?, fecha = ?, ejecutivo = ?, total = ?, datos = ? WHERE id = ?')
+        .bind(b.cliente ?? null, b.fecha ?? null, b.ejecutivo ?? null, b.total ?? 0, JSON.stringify(b.datos), id).run();
+      return json({ ok: true, numero: id });
+    }
     if (path === 'remisiones' && method === 'POST') {
       const b = await request.json().catch(() => ({}));
       if (!b.datos || !Array.isArray(b.datos.items) || !b.datos.items.length) return json({ error: 'La remisión no tiene productos' }, 400);
