@@ -368,6 +368,18 @@
   .rem-ped input[type=number] { width: 78px; }
   .rem-ped input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--jade); }
   .rem-ped .num { text-align: right; white-space: nowrap; }
+
+  .pry-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .pry-kpi { background: #fff; border: 1.5px solid var(--border, #e8dfd8); border-radius: 12px; padding: 12px 14px; }
+  .pry-kpi b { display: block; font-size: 1.5rem; color: var(--jade-dark, #4a8272); }
+  .pry-kpi span { font-size: 0.78rem; color: #8c8278; }
+  .pry-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; white-space: nowrap; }
+  .pry-rojo { background: #fde4e0; color: #b3392b; } .pry-ambar { background: #fff0d1; color: #94620a; }
+  .pry-verde { background: #dff1e8; color: #2f7a57; } .pry-gris { background: #ece7e2; color: #6d6459; }
+  .pry-tag { font-size: 0.72rem; color: #8c8278; display: block; }
+  .pry-wa { background: #25a35a; color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
+  .pry-wa[disabled] { background: #cfc8c0; cursor: not-allowed; }
+  #pryPlantilla { width: 100%; min-height: 84px; padding: 10px; border: 1.5px solid var(--border, #e8dfd8); border-radius: 10px; font: inherit; }
   .ped-letras { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
   .ped-letras button { all: unset; cursor: pointer; box-sizing: border-box; min-width: 34px; height: 34px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--card-border); border-radius: 8px; font-weight: 700; font-size: 0.85rem; color: var(--jade-dark); background: var(--bg); }
   .ped-letras button:hover { border-color: var(--jade); }
@@ -525,6 +537,7 @@
           <button class="nav-sub" data-panel="comercial" data-sub="ventas">📈 Ventas</button>
           <button class="nav-sub" data-panel="comercial" data-sub="crm">👥 CRM</button>
           <button class="nav-sub" data-panel="comercial" data-sub="inv">📦 Inventario</button>
+          <button class="nav-sub" data-panel="comercial" data-sub="proyecciones">🔮 Proyecciones</button>
         </div>
       </div>
 
@@ -876,6 +889,58 @@
               <tbody id="invBody"></tbody>
             </table>
           </div>
+        </div>
+
+        <div class="subpanel" id="sub-proyecciones">
+          <details class="ayuda"><summary>💡 ¿Cómo se usa esta sección?</summary><ol>
+            <li>El sistema revisa cada cliente con sus pedidos registrados y calcula cada cuántos días suele comprar. Con eso estima cuándo le toca volver a comprar.</li>
+            <li>Elija el mes a proyectar. Del día 20 en adelante se abre sola la proyección del mes siguiente.</li>
+            <li>«Atrasado» significa que ya pasó su fecha esperada: conviene escribirle ya. El botón de WhatsApp abre el mensaje listo para enviar.</li>
+            <li>Abajo ve cuántas unidades de cada producto podrían salir, comparadas con el stock actual, para planear compras a proveedores.</li>
+          </ol></details>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div class="lp-form-grid" style="max-width:560px;">
+              <div><label>Mes a proyectar</label><select id="pryMes"></select></div>
+              <div><label>Mostrar</label>
+                <select id="pryModo">
+                  <option value="recurrentes">Clientes recurrentes (2 compras o más)</option>
+                  <option value="todos">Recurrentes y compra única (reactivar)</option>
+                </select>
+              </div>
+            </div>
+            <div class="sub" id="pryBase" style="margin-top:10px;"></div>
+          </div>
+
+          <div class="pry-kpis" id="pryKpis"></div>
+
+          <div class="card scrollx" style="margin-bottom:16px;">
+            <h3>Clientes a contactar</h3>
+            <div class="sub">Ordenados por fecha esperada de compra. Los atrasados aparecen primero.</div>
+            <table class="t-cards" id="pryTable">
+              <thead><tr><th>Cliente</th><th>Última compra</th><th>Compra cada</th><th>Próxima compra</th><th>Estado</th><th class="num">Ticket prom.</th><th class="num">Cartera</th><th>Suele llevar</th><th>Contacto</th></tr></thead>
+              <tbody id="pryBody"></tbody>
+            </table>
+            <div id="pryVacio" class="sub" style="margin-top:10px; display:none;">No hay clientes por contactar para este mes con el historial actual.</div>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;">
+            <h3>Mensaje de WhatsApp</h3>
+            <div class="sub">Use {nombre} y {productos}: se reemplazan solos con los datos de cada cliente. Se guarda en este navegador.</div>
+            <textarea id="pryPlantilla"></textarea>
+          </div>
+
+          <div class="card scrollx" style="margin-bottom:16px;">
+            <h3>Proyección de inventario</h3>
+            <div class="sub">Unidades que podrían salir con los clientes recurrentes de la lista, tomando lo que llevan habitualmente, frente al stock actual.</div>
+            <table class="t-cards" id="pryInvTable">
+              <thead><tr><th>Producto</th><th class="num">Clientes</th><th class="num">Unidades proyectadas</th><th class="num">Stock actual</th><th class="num">Faltante</th></tr></thead>
+              <tbody id="pryInvBody"></tbody>
+            </table>
+            <div id="pryInvVacio" class="sub" style="margin-top:10px; display:none;">Sin datos para proyectar inventario.</div>
+          </div>
+
+          <button id="pryExcel" class="lp-add-btn">⬇ Descargar proyección en Excel</button>
         </div>
       </div>
 
@@ -1642,6 +1707,7 @@ const SUB_INFO = {
   vencidos: { title: 'Vencidos', desc: 'Productos recibidos que están a 3 meses o menos de su fecha de vencimiento.' },
   cartera: { title: 'Cartera', desc: 'Clientes con crédito pendiente y montos por cobrar.' },
   cotizaciones: { title: 'Cotizaciones', desc: 'Cotizaciones enviadas a clientes y su estado.' },
+  proyecciones: { title: 'Proyecciones', desc: 'Clientes que están próximos a comprar según su historial de compras, y las unidades que podrían salir.' },
   remision: { title: 'Remisión de entrega', desc: 'Documento de entrega de producto al cliente, con los valores tal como están en la venta.' },
   caja: { title: 'Flujo de caja', desc: 'Ingresos, gastos y saldo de caja de la operación.' }
 };
@@ -5528,6 +5594,199 @@ document.getElementById('remDescargar').addEventListener('click', async () => {
 });
 document.querySelector('.nav-sub[data-sub="remision"]').addEventListener('click', () => { remRenderClientes(); remActualizarNumero(); cargarRemisionesDB(); });
 try { remRenderClientes(); remRenderResumen(); } catch (e) {}
+
+
+// ---- Proyecciones de compra de clientes ----
+const PRY_DIAS_AVISO = 5;      // se sugiere escribir 5 días antes de la fecha esperada
+const PRY_PLANTILLA = 'Hola {nombre} 🐾, te escribimos de Huellas Online. Por estas fechas suele necesitar su pedido de {productos}. ¿Le separamos y le llevamos lo de siempre? Quedamos atentos 🐶🐱';
+let PRY_LISTA = [], PRY_INV = [];
+
+function pryDia(d) { return d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); }
+function pryNum(iso) { const [y, m, d] = iso.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 86400000); }
+function pryIso(n) { return new Date(n * 86400000).toISOString().slice(0, 10); }
+function pryFechaTxt(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function pryMediana(a) { const s = [...a].sort((x, y) => x - y), m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function pryMesNombre(ym) { const [y, m] = ym.split('-').map(Number); const t = new Date(y, m - 1, 1).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); }
+function pryFinMes(ym) { const [y, m] = ym.split('-').map(Number); return pryNum(pryIso(Math.round(Date.UTC(y, m, 1) / 86400000) - 1)); }
+function pryNombreCorto(n) { const w = String(n || '').trim().split(/\s+/)[0] || ''; return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }
+function pryTelefono(t) {
+  const d = String(t || '').replace(/\D/g, '');
+  if (d.length === 10 && d.startsWith('3')) return '57' + d;
+  if (d.length === 12 && d.startsWith('57')) return d;
+  return d.length >= 10 ? d : '';
+}
+
+function pryCalcularClientes() {
+  const hoyIso = pryDia(new Date()), hoy = pryNum(hoyIso);
+  const porCliente = {};
+  PEDIDOS_HISTORIAL.forEach(p => {
+    if (!p.dbId || !p.items || !p.items.length) return;
+    const k = normTxt(p.clienteNombre); if (!k) return;
+    const c = porCliente[k] || (porCliente[k] = { clave: k, nombre: p.clienteNombre, dias: {} });
+    const dia = pryDia(p.fechaRaw);
+    const o = c.dias[dia] || (c.dias[dia] = { dia, num: pryNum(dia), total: 0, items: [] });
+    o.total += p.total || 0; p.items.forEach(it => o.items.push(it));
+  });
+  const out = [];
+  Object.values(porCliente).forEach(c => {
+    // Compras separadas por 3 días o menos se cuentan como una sola compra
+    const dias = Object.values(c.dias).sort((a, b) => a.num - b.num);
+    const eventos = [];
+    dias.forEach(d => {
+      const ult = eventos[eventos.length - 1];
+      if (ult && d.num - ult.numFin <= 3) { ult.numFin = d.num; ult.total += d.total; ult.items.push(...d.items); }
+      else eventos.push({ dia: d.dia, num: d.num, numFin: d.num, total: d.total, items: [...d.items] });
+    });
+    const n = eventos.length;
+    const ultima = eventos[n - 1];
+    const gaps = []; for (let i = 1; i < n; i++) gaps.push(eventos[i].num - eventos[i - 1].num);
+    const intervalo = n >= 2 ? Math.max(7, Math.round(pryMediana(gaps))) : null;
+    const esperada = ultima.num + (intervalo || 30);
+    const meses = [...new Set(eventos.map(e => e.dia.slice(0, 7)))];
+    let todosMeses = false;
+    if (meses.length >= 2) {
+      const ini = meses[0], fin = meses[meses.length - 1];
+      const [y1, m1] = ini.split('-').map(Number), [y2, m2] = fin.split('-').map(Number);
+      todosMeses = ((y2 - y1) * 12 + (m2 - m1) + 1) === meses.length;
+    }
+    // Productos habituales: los de su última compra, con la cantidad promedio por compra
+    const stats = {};
+    eventos.forEach(e => {
+      const enEvento = {};
+      e.items.forEach(it => { const kk = it.cod || it.producto; const x = enEvento[kk] || (enEvento[kk] = { it, cant: 0 }); x.cant += it.cantidad || 0; });
+      Object.entries(enEvento).forEach(([kk, x]) => { const s = stats[kk] || (stats[kk] = { it: x.it, compras: 0, unid: 0 }); s.compras++; s.unid += x.cant; });
+    });
+    const ultKeys = new Set(ultima.items.map(it => it.cod || it.producto));
+    const habituales = Object.entries(stats).filter(([kk]) => ultKeys.has(kk))
+      .map(([kk, s]) => ({ cod: s.it.cod, producto: s.it.producto, cantidad: Math.max(1, Math.ceil(s.unid / s.compras)) }));
+    const crm = CRM_CLIENTES.find(x => normTxt(x.nombre) === c.clave);
+    const cartera = CARTERA.filter(x => normTxt(x.cliente) === c.clave).reduce((s, x) => s + (x.saldo != null ? x.saldo : x.total), 0);
+    const diasDesde = hoy - ultima.numFin;
+    out.push({
+      clave: c.clave, nombre: c.nombre, telefono: crm ? crm.telefono : '', compras: n, ultima: pryIso(ultima.numFin), diasDesde,
+      intervalo, esperada, esperadaIso: pryIso(esperada), ticket: Math.round(eventos.reduce((s, e) => s + e.total, 0) / n),
+      todosMeses, habituales, cartera,
+      riesgo: !!(intervalo && diasDesde > intervalo * 2.5),
+      regularidad: n >= 3 ? 'Alta' : (n === 2 ? 'Media' : 'Baja')
+    });
+  });
+  return { clientes: out, hoy, hoyIso };
+}
+
+function pryContactados() { try { return JSON.parse(localStorage.getItem('pryContactados') || '{}'); } catch (e) { return {}; } }
+function pryGuardarContactado(k, v) { try { const c = pryContactados(); if (v) c[k] = 1; else delete c[k]; localStorage.setItem('pryContactados', JSON.stringify(c)); } catch (e) {} }
+function pryPlantilla() { try { return localStorage.getItem('pryPlantilla') || PRY_PLANTILLA; } catch (e) { return PRY_PLANTILLA; } }
+function pryMensaje(cl) {
+  const prods = cl.habituales.slice(0, 3).map(x => x.producto).join(', ') || 'siempre';
+  return pryPlantilla().replace(/\{nombre\}/g, pryNombreCorto(cl.nombre)).replace(/\{productos\}/g, prods);
+}
+
+function pryInitMeses() {
+  const sel = document.getElementById('pryMes'); if (!sel || sel.options.length) return;
+  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  const base = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+    const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const o = document.createElement('option'); o.value = ym; o.textContent = pryMesNombre(ym) + (i === 0 ? ' (mes en curso)' : ''); sel.appendChild(o);
+  }
+  sel.selectedIndex = hoy.getDate() >= 20 ? 1 : 0;
+}
+
+function renderProyecciones() {
+  const body = document.getElementById('pryBody'); if (!body) return;
+  pryInitMeses();
+  const ym = document.getElementById('pryMes').value;
+  const modo = document.getElementById('pryModo').value;
+  const { clientes, hoy } = pryCalcularClientes();
+  const fin = pryFinMes(ym);
+  const reales = PEDIDOS_HISTORIAL.filter(p => p.dbId);
+  const primera = reales.length ? pryDia(reales.reduce((a, b) => (a.fechaRaw < b.fechaRaw ? a : b)).fechaRaw) : null;
+  document.getElementById('pryBase').textContent = reales.length
+    ? 'Base: ' + reales.length + ' pedidos de ' + clientes.length + ' clientes desde ' + pryFechaTxt(primera) + '. Con pocos meses de historial, las fechas son estimaciones que mejoran a medida que se acumulan pedidos.'
+    : 'Todavía no hay pedidos registrados para proyectar.';
+
+  let lista = clientes.filter(c => c.esperada <= fin && (c.compras >= 2 || (modo === 'todos' && c.diasDesde <= 90)));
+  lista.sort((a, b) => a.esperada - b.esperada);
+  PRY_LISTA = lista;
+
+  const rec = lista.filter(c => c.compras >= 2 && !c.riesgo), unicos = lista.filter(c => c.compras < 2 || c.riesgo);
+  const atras = lista.filter(c => c.esperada < hoy && !c.riesgo).length;
+  const valor = rec.reduce((s, c) => s + c.ticket, 0);
+  document.getElementById('pryKpis').innerHTML =
+    '<div class="pry-kpi"><b>' + rec.length + '</b><span>Clientes recurrentes a contactar</span></div>' +
+    '<div class="pry-kpi"><b>' + atras + '</b><span>Atrasados (ya pasó su fecha)</span></div>' +
+    '<div class="pry-kpi"><b>' + fmtCOPc(valor) + '</b><span>Venta estimada (ticket promedio)</span></div>' +
+    '<div class="pry-kpi"><b>' + unicos.length + '</b><span>Por reactivar (compra única o en riesgo)</span></div>';
+
+  const cont = pryContactados();
+  body.innerHTML = '';
+  lista.forEach(c => {
+    let chip;
+    if (c.riesgo) chip = '<span class="pry-chip pry-gris">En riesgo · ' + c.diasDesde + ' días sin comprar</span>';
+    else if (c.esperada < hoy) chip = '<span class="pry-chip pry-rojo">Atrasado ' + (hoy - c.esperada) + ' días</span>';
+    else if (c.esperada <= hoy + 7) chip = '<span class="pry-chip pry-ambar">Esta semana</span>';
+    else chip = '<span class="pry-chip pry-verde">Próximo · escribir desde ' + pryFechaTxt(pryIso(c.esperada - PRY_DIAS_AVISO)) + '</span>';
+    const tag = (c.todosMeses ? '🔁 Compra todos los meses' : '') + (c.compras < 2 ? '1 sola compra · estimado a 30 días' : '');
+    const k = ym + '|' + c.clave;
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td data-label="Cliente" class="prod">' + remEsc(c.nombre) + '<span class="pry-tag">' + tag + (tag && c.compras >= 2 ? ' · ' : '') + (c.compras >= 2 ? c.compras + ' compras · regularidad ' + c.regularidad.toLowerCase() : '') + '</span></td>' +
+      '<td data-label="Última compra">' + pryFechaTxt(c.ultima) + '<span class="pry-tag">hace ' + c.diasDesde + ' días</span></td>' +
+      '<td data-label="Compra cada">' + (c.intervalo ? '~' + c.intervalo + ' días' : '—') + '</td>' +
+      '<td data-label="Próxima compra">' + pryFechaTxt(c.esperadaIso) + '</td>' +
+      '<td data-label="Estado">' + chip + '</td>' +
+      '<td class="num" data-label="Ticket prom.">' + fmtCOPc(c.ticket) + '</td>' +
+      '<td class="num" data-label="Cartera">' + (c.cartera > 0 ? '<span class="pry-chip pry-rojo">' + fmtCOPc(c.cartera) + '</span>' : '—') + '</td>' +
+      '<td data-label="Suele llevar" style="min-width:200px;">' + remEsc(c.habituales.slice(0, 3).map(x => x.cantidad + '× ' + x.producto).join(' · ')) + (c.habituales.length > 3 ? ' …' : '') + '</td>' +
+      '<td data-label="Contacto" style="white-space:nowrap;"><button type="button" class="pry-wa"' + (pryTelefono(c.telefono) ? '' : ' disabled title="Este cliente no tiene celular registrado"') + '>' + (pryTelefono(c.telefono) ? '💬 WhatsApp' : 'Sin celular') + '</button> <label style="font-size:0.78rem;"><input type="checkbox" class="pry-ok" ' + (cont[k] ? 'checked' : '') + '> Contactado</label></td>';
+    const wa = tr.querySelector('.pry-wa');
+    wa.addEventListener('click', () => { const t = pryTelefono(c.telefono); if (t) window.open('https://wa.me/' + t + '?text=' + encodeURIComponent(pryMensaje(c)), '_blank', 'noopener'); });
+    tr.querySelector('.pry-ok').addEventListener('change', (e) => pryGuardarContactado(k, e.target.checked));
+    body.appendChild(tr);
+  });
+  document.getElementById('pryTable').style.display = lista.length ? '' : 'none';
+  document.getElementById('pryVacio').style.display = lista.length ? 'none' : '';
+
+  // Proyección de inventario con los clientes recurrentes de la lista
+  const agg = {};
+  rec.forEach(c => c.habituales.forEach(x => {
+    const kk = x.cod || x.producto; const a = agg[kk] || (agg[kk] = { cod: x.cod, producto: x.producto, clientes: 0, unid: 0 });
+    a.clientes++; a.unid += x.cantidad;
+  }));
+  PRY_INV = Object.values(agg).map(a => { const stock = INVENTARIO_STOCK[a.cod]; return { ...a, stock: stock == null ? null : stock, faltante: stock == null ? null : Math.max(0, a.unid - stock) }; })
+    .sort((a, b) => b.unid - a.unid);
+  const ib = document.getElementById('pryInvBody'); ib.innerHTML = '';
+  PRY_INV.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="prod">' + remEsc(a.producto) + '</td><td class="num" data-label="Clientes">' + a.clientes + '</td><td class="num" data-label="Unid. proyectadas"><b>' + a.unid + '</b></td><td class="num" data-label="Stock actual">' + (a.stock == null ? '—' : a.stock) + '</td><td class="num" data-label="Faltante">' + (a.faltante == null ? '—' : (a.faltante > 0 ? '<span class="pry-chip pry-rojo">faltan ' + a.faltante + '</span>' : '<span class="pry-chip pry-verde">cubierto</span>')) + '</td>';
+    ib.appendChild(tr);
+  });
+  document.getElementById('pryInvTable').style.display = PRY_INV.length ? '' : 'none';
+  document.getElementById('pryInvVacio').style.display = PRY_INV.length ? 'none' : '';
+}
+
+document.getElementById('pryMes').addEventListener('change', () => renderProyecciones());
+document.getElementById('pryModo').addEventListener('change', () => renderProyecciones());
+(function () {
+  const ta = document.getElementById('pryPlantilla');
+  ta.value = pryPlantilla();
+  ta.addEventListener('input', () => { try { localStorage.setItem('pryPlantilla', ta.value); } catch (e) {} });
+})();
+document.getElementById('pryExcel').addEventListener('click', () => {
+  if (typeof XLSX === 'undefined') { alert('No se pudo cargar el generador de Excel. Revise la conexión.'); return; }
+  const ym = document.getElementById('pryMes').value, hoy = pryNum(pryDia(new Date()));
+  const filas = PRY_LISTA.map(c => ({
+    Cliente: c.nombre, Celular: c.telefono || '', 'Última compra': c.ultima, 'Compra cada (días)': c.intervalo || '', 'Próxima compra esperada': c.esperadaIso,
+    Estado: c.riesgo ? 'En riesgo' : (c.esperada < hoy ? 'Atrasado' : (c.esperada <= hoy + 7 ? 'Esta semana' : 'Próximo')),
+    'N° compras': c.compras, 'Ticket promedio': c.ticket, Cartera: c.cartera, 'Suele llevar': c.habituales.map(x => x.cantidad + ' x ' + x.producto).join(' | ')
+  }));
+  const inv = PRY_INV.map(a => ({ Producto: a.producto, Clientes: a.clientes, 'Unidades proyectadas': a.unid, 'Stock actual': a.stock == null ? '' : a.stock, Faltante: a.faltante == null ? '' : a.faltante }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Clientes a contactar');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(inv), 'Inventario proyectado');
+  XLSX.writeFile(wb, 'Proyeccion_' + ym + '.xlsx');
+});
+document.querySelector('.nav-sub[data-sub="proyecciones"]').addEventListener('click', () => { try { renderProyecciones(); } catch (e) { console.error(e); } });
 
 </script>
 </body>
