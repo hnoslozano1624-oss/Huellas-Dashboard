@@ -532,6 +532,26 @@ async function handleApi(request, env, url) {
     }
   }
 
+  // --- Remisiones de entrega (historial permanente; el número lo asigna el servidor) ---
+  if (path.startsWith('remisiones')) {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS remisiones (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente TEXT, fecha TEXT, ejecutivo TEXT, total REAL, datos TEXT NOT NULL, creado_en TEXT NOT NULL DEFAULT (datetime(\'now\')))').run();
+    if (path === 'remisiones' && method === 'GET') {
+      const { results } = await env.DB.prepare('SELECT id, datos FROM remisiones ORDER BY id ASC').all();
+      return json(results.map(r => { try { return { ...JSON.parse(r.datos), num: r.id }; } catch (e) { return null; } }).filter(Boolean));
+    }
+    if (path === 'remisiones/siguiente' && method === 'GET') {
+      const fila = await env.DB.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'remisiones'").first();
+      return json({ numero: (fila ? fila.seq : 0) + 1 });
+    }
+    if (path === 'remisiones' && method === 'POST') {
+      const b = await request.json().catch(() => ({}));
+      if (!b.datos || !Array.isArray(b.datos.items) || !b.datos.items.length) return json({ error: 'La remisión no tiene productos' }, 400);
+      const r = await env.DB.prepare('INSERT INTO remisiones (cliente, fecha, ejecutivo, total, datos) VALUES (?, ?, ?, ?, ?)')
+        .bind(b.cliente ?? null, b.fecha ?? null, b.ejecutivo ?? null, b.total ?? 0, JSON.stringify(b.datos)).run();
+      return json({ ok: true, numero: r.meta.last_row_id });
+    }
+  }
+
   // --- Cierres de mes ---
   if (path === 'cierres' && method === 'GET') {
     const { results } = await env.DB.prepare('SELECT mes, fecha_cierre FROM cierres_mes ORDER BY mes DESC').all();
