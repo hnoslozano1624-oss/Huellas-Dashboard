@@ -5331,8 +5331,6 @@ function remGenerarPDF(d) {
   doc.text('Número: ' + numTxt, xr, yd); yd += 14;
   doc.text('Fecha: ' + fechaTxt, xr, yd); yd += 14;
   doc.text('Ejecutivo comercial: ' + d.ejecutivo, xr, yd); yd += 14;
-  const refs = (d.pedidos || []).join(', ');
-  if (refs) doc.text(doc.splitTextToSize('Pedido(s): ' + refs, boxW - 44)[0], xr, yd);
   y += boxH + 26;
 
   const colX = [margin, margin + 270, margin + 330, margin + 430];
