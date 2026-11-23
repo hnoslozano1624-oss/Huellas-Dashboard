@@ -5298,7 +5298,7 @@ function remGenerarPDF(d) {
   const fechaTxt = remFechaTxt(d.fecha);
 
   const encabezado = () => {
-    doc.setFillColor(248,245,242); doc.rect(0, 0, pageW, 96, 'F');
+    doc.setFillColor(255,255,255); doc.rect(0, 0, pageW, 96, 'F');
     try { doc.addImage(REM_LOGO, 'JPEG', margin, 16, 64, 64); } catch (e) {}
     doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.setTextColor(...INK);
     doc.text('Huellas Online', margin + 78, 42);
