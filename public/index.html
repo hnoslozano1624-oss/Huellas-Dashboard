@@ -5646,7 +5646,7 @@ function pryCalcularClientes() {
     const cartera = CARTERA.filter(x => normTxt(x.cliente) === c.clave).reduce((s, x) => s + (x.saldo != null ? x.saldo : x.total), 0);
     const diasDesde = hoy - ultima.numFin;
     out.push({
-      clave: c.clave, nombre: c.nombre, telefono: crm ? crm.telefono : '', compras: n, ultima: pryIso(ultima.numFin), diasDesde,
+      clave: c.clave, nombre: c.nombre, telefono: crm ? crm.telefono : '', compras: n, ultima: pryIso(ultima.numFin), ultimaNum: ultima.numFin, diasDesde,
       intervalo, esperada, esperadaIso: pryIso(esperada), ticket: Math.round(eventos.reduce((s, e) => s + e.total, 0) / n),
       todosMeses, habituales, cartera,
       riesgo: !!(intervalo && diasDesde > intervalo * 2.5),
@@ -5677,14 +5677,21 @@ function renderProyecciones() {
   const modo = document.getElementById('pryModo').value;
   const { clientes, hoy } = pryCalcularClientes();
   const fin = pryFinMes(ym);
+  // Un cliente que ya tiene un pedido registrado dentro de la ventana de la proyección sale de la lista:
+  // mes en curso -> desde el día 1; mes siguiente -> desde el día 20 del mes anterior (cuando se abre la proyección)
+  const [yy, mm] = ym.split('-').map(Number);
+  const mesActual = pryDia(new Date()).slice(0, 7) === ym;
+  const iniVentana = mesActual ? pryNum(ym + '-01') : pryNum(pryIso(Math.round(Date.UTC(yy, mm - 2, 20) / 86400000)));
+  const candidatos = clientes.filter(c => c.esperada <= fin && (c.compras >= 2 || (modo === 'todos' && c.diasDesde <= 90)));
+  let lista = candidatos.filter(c => c.ultimaNum < iniVentana);
+  const atendidos = candidatos.length - lista.length;
+  lista.sort((a, b) => a.esperada - b.esperada);
   const reales = PEDIDOS_HISTORIAL.filter(p => p.dbId);
   const primera = reales.length ? pryDia(reales.reduce((a, b) => (a.fechaRaw < b.fechaRaw ? a : b)).fechaRaw) : null;
   document.getElementById('pryBase').textContent = reales.length
-    ? 'Base: ' + reales.length + ' pedidos de ' + clientes.length + ' clientes desde ' + pryFechaTxt(primera) + '. Con pocos meses de historial, las fechas son estimaciones que mejoran a medida que se acumulan pedidos.'
+    ? 'Base: ' + reales.length + ' pedidos de ' + clientes.length + ' clientes desde ' + pryFechaTxt(primera) + '. Con pocos meses de historial, las fechas son estimaciones que mejoran a medida que se acumulan pedidos.' + (atendidos ? ' ✅ ' + atendidos + (atendidos === 1 ? ' cliente ya compró' : ' clientes ya compraron') + ' desde ' + pryFechaTxt(pryIso(iniVentana)) + ' y salió de la lista.' : '')
     : 'Todavía no hay pedidos registrados para proyectar.';
 
-  let lista = clientes.filter(c => c.esperada <= fin && (c.compras >= 2 || (modo === 'todos' && c.diasDesde <= 90)));
-  lista.sort((a, b) => a.esperada - b.esperada);
   PRY_LISTA = lista;
 
   const rec = lista.filter(c => c.compras >= 2 && !c.riesgo), unicos = lista.filter(c => c.compras < 2 || c.riesgo);
